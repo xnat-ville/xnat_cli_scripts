@@ -16,19 +16,19 @@ __version__ = (1, 0, 0)
 
 import argparse
 import requests
-import xnat
-import xnat.core
-import xnat.mixin
-from xnat.session import XNATSession
 import csv
 import time
 import warnings
+from pathlib import Path
+from os import listdir
+from os.path import isfile
+#import xnat
+#import xnat.core
+import xnat.mixin
+from xnat.session import XNATSession
 import xnat_cli_scripts.cli_common
 warnings.filterwarnings('ignore')
 
-
-
-# Time Helper Function
 
 def apply_sleep(args: argparse.Namespace) -> None:
     """ Applies sleep if -s is specified """
@@ -372,6 +372,28 @@ def execute_update_accessibilities(connection: XNATSession, args: argparse.Names
             print(f"[ERROR] Exception while reading CSV: {e}")
 
 
+def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Update/upload project XML by reading XML for individual files in an input folder.
+    """
+
+    if args.input_folder:
+        try:
+            http_headers = {}
+            http_headers['Content-Type: '] = 'application/xml'
+            listing = listdir(args.input_folder)
+            for f in listing:
+                project_xml = xnat_cli_scripts.cli_common.read_text_file(f"{args.input_folder}/{f}")
+                ab=project_xml
+                tmp_string = str(Path(f).with_suffix(''))
+                xnat_path=f"/data/archive/projects/{tmp_string}"
+                # Do not have the right syntax yet
+#                response = connection.put(xnat_path, data=project_xml, format="inbody=true" )
+
+        except Exception as e:
+            print(f"[ERROR] Exception while reading through folder: {args.input_folder}")
+
+
 def execute_list_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     # Check for LIST actions first
     if args.users:
@@ -413,8 +435,56 @@ def execute_update_master(connection: xnat.session.XNATSession, args: argparse.N
             execute_update_accessibilities(connection, args)
         else:
             print("[WARNING] No CSV file provided. Please specify --csv for updating accessibilities.")
+        return
+
+    # Check for UPDATE action (Update Project XML)
+    if args.update and args.project_xml:
+        if args.input_folder:
+            execute_update_project_xml(connection, args)
+        else:
+            print("[WARNING] No CSV file provided. Please specify --csv for updating project_xml.")
     else:
-        print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities or -g and --csv.")
+        print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml or -g and --csv.")
+
+
+
+def execute_get_project_xml(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    project_ids = []
+    if args.csv_file:
+        with open(args.csv_file, mode='r') as file:
+            csv_reader = csv.reader(file, delimiter='\t')
+            for row in csv_reader:
+                project_ids.append(row[0])  # Assuming the project ID is in the first column
+    else:
+        all_projects = session.get_json(f"/data/projects")
+        # Apply sleep after the REST call (moved up here)
+        result = all_projects['ResultSet']['Result']
+
+        for project_json in result:
+            project_ids.append(project_json['ID'])
+
+
+    for id in project_ids:
+        xml=session.get(f"/data/projects/{id}?format=xml")
+        z = xml.content
+        f=open(f"{args.output_folder}/{id}.xml", "w")
+        f.write(xml.content.decode("utf-8"))
+        f.close()
+
+
+def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+    # Check for UPDATE action (Change Groups)
+    if args.get and args.project_xml:
+        if args.output_folder:
+            execute_get_project_xml(connection, args)
+        else:
+            print("[WARNING] No output folder provided. Please specify --output_folder.")
+        return
+
+
+
 
 
 #def execute_project_list(session: xnat.session.XNATSession, args: argparse.Namespace) -> None:
@@ -481,6 +551,7 @@ if __name__ == "__main__":
     parser.add_argument('-L', '--list',            dest='list',                     help="Action is to LIST",                          action='store_true')
     parser.add_argument('-R', '--remove',          dest='remove',                   help='Remove groups from projects',                action='store_true')
     parser.add_argument(        '--update',        dest='update',                   help='Update project accessibilities',             action='store_true')
+    parser.add_argument(        '--get',           dest='get',                      help='Get a certain type of object at Project Level', action='store_true')
 
     # These are objects of the operations; 
     parser.add_argument('-u', '--users',           dest='users',                    help='Listing Verb object: Users',                 action='store_true')
@@ -488,37 +559,37 @@ if __name__ == "__main__":
     parser.add_argument(      '--accessibilities', dest='accessibilities',          help="Accessibilities for projects",                action='store_true')
     parser.add_argument(      '--subjects',        dest='subjects',                 help="Include list of subjects in output",         action='store_true')
     parser.add_argument(      '--sessions',        dest='sessions',                 help="Include list of sessions in output",         action='store_true')
-
+    parser.add_argument(      '--project_xml',     dest='project_xml',              help='Extract/Operate on Project XML',             action='store_true')
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
     parser.add_argument('-s', '--sleep',           dest='sleep',                    help="Time to sleep after each REST call")
     parser.add_argument('-v', '--verbose',         dest='verbose',                  help="Verbose mode",                               action='store_true')
     parser.add_argument('--csv',                   dest='csv_file',                 help='Path to CSV file operations such as listing, removing, or changing groups')
-    
-args = parser.parse_args()
+    parser.add_argument(      '--input_folder',    dest='input_folder',             help='Path to input folder of files')
+    parser.add_argument(      '--output_folder',   dest='output_folder',            help='Path to output folder')
 
-args.url = "https://cnda.wustl.edu" if args.url is None else args.url
+    args = parser.parse_args()
 
-auth_user = xnat_cli_scripts.cli_common.extract_auth_user(args)
-auth_password = xnat_cli_scripts.cli_common.extract_auth_password(args)
-xnat_extensions = xnat_cli_scripts.cli_common.extract_extension_types(args)
+    args.url = "localhost:8080" if args.url is None else args.url
 
-session = xnat.connect(args.url, user=auth_user, password=auth_password, extension_types=xnat_extensions)
+    auth_user = xnat_cli_scripts.cli_common.extract_auth_user(args)
+    auth_password = xnat_cli_scripts.cli_common.extract_auth_password(args)
+    xnat_extensions = xnat_cli_scripts.cli_common.extract_extension_types(args)
 
-if args.list:
-    execute_list_master(session, args)
-elif args.remove:
-    execute_remove_master(session, args)
-elif args.update:
-    execute_update_master(session, args)
-else:
-    print("[ERROR] No valid action specified. Use -L, -R, or --update.")
+    session = xnat.connect(args.url, user=auth_user, password=auth_password, extension_types=xnat_extensions)
 
-#    execute_project_list(session, args)
-#    execute_subject_list(session, args)
-#    execute_session_list(session, args)
+    if args.list:
+        execute_list_master(session, args)
+    elif args.remove:
+        execute_remove_master(session, args)
+    elif args.update:
+        execute_update_master(session, args)
+    elif args.get:
+        execute_get_master(session, args)
+    else:
+        print("[ERROR] No valid action specified. Use -L, -R, --update, or --get.")
 
-session.disconnect()
+    session.disconnect()
 
 

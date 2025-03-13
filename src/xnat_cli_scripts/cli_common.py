@@ -31,3 +31,9 @@ def extract_extension_types(args: argparse.Namespace) -> bool:
         return True
 
     return False
+
+def read_text_file(file_path: str) -> str:
+    with open(file_path, "r") as file:
+        content = file.read()
+        file.close()
+        return content

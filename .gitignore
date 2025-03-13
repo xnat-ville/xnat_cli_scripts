@@ -1,5 +1,6 @@
 # This is specific to our testing environment
 test_data/
+debug/
 
 # Boilerplate
 # Byte-compiled / optimized / DLL files
