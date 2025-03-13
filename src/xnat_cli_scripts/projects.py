@@ -328,9 +328,6 @@ def execute_list_project_accessibilities(connection: XNATSession, args: argparse
         # Print the project ID and its accessibility
         print(f"{project_id}\t{accessibility}")
 
-        apply_sleep(args)  # Sleep after processing each project
-
-
 def execute_update_accessibilities(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Update the accessibility of projects based on the CSV file.
@@ -363,8 +360,6 @@ def execute_update_accessibilities(connection: XNATSession, args: argparse.Names
                         print(f"{project_id}\t{new_accessibility}\tUPDATED")
                     else:
                         print(f"{project_id}\t{new_accessibility}\tERROR\t{response.status_code}: {response.text}")
-
-                    apply_sleep(args)  # Sleep after processing each CSV line
 
         except FileNotFoundError:
             print(f"[ERROR] CSV file not found: {args.csv_file}")
