@@ -38,12 +38,13 @@ import json  # JSON module to save files correctly
 import json
 from pathlib import Path
 
+import json
+from pathlib import Path
+
 def execute_get_investigator_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
-    """
-    Retrieves investigator data from XNAT and saves each investigator as an individual JSON file.
-    Files are named using their investigator ID and full name.
-    """
-    # Default output folder is 'test_data/investigator_json'
+    
+    #Retrieves investigator data from XNAT and saves each investigator as an individual JSON file.
+    
     output_folder = args.output_folder if args.output_folder else "test_data/investigator_json"
     Path(output_folder).mkdir(parents=True, exist_ok=True)
 
@@ -51,20 +52,22 @@ def execute_get_investigator_json(connection: xnat.session.XNATSession, args: ar
     response = connection.get_json("/xapi/investigators")
     apply_sleep(args)
 
+    print(f"[INFO] API returned {len(response)} investigators.")
+
     for investigator in response:
-        investigator_id = investigator.get('xnatInvestigatordataId', 'UNKNOWN_ID')  # Keep as string
-        first_name = investigator.get('firstname', '').strip()
-        last_name = investigator.get('lastname', '').strip()
+        investigator_id = investigator.get('xnatInvestigatordataId')  
 
-        # Construct a meaningful name
-        investigator_name = f"{first_name}_{last_name}".replace(" ", "_")
+        if not investigator_id:  # Skip if no ID found
+            print(f"[WARNING] Investigator missing ID, skipping.")
+            continue
 
-        # Save JSON file with a meaningful name
-        file_name = f"{output_folder}/{investigator_id}_{investigator_name}.json"
+        # Save JSON with only the ID as filename
+        file_name = f"{output_folder}/{investigator_id}.json"
         with open(file_name, "w", encoding="utf-8") as f:
-            json.dump(investigator, f, indent=4)  # Pretty-print JSON output
+            json.dump(investigator, f, indent=4)
 
-    print(f"[INFO] Successfully saved a total of {len(response)} investigator JSON files.")
+    print(f"Successfully saved investigator JSON files")
+
 
 
 def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
