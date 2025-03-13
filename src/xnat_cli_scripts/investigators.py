@@ -52,8 +52,6 @@ def execute_get_investigator_json(connection: xnat.session.XNATSession, args: ar
     response = connection.get_json("/xapi/investigators")
     apply_sleep(args)
 
-    print(f"[INFO] API returned {len(response)} investigators.")
-
     for investigator in response:
         investigator_id = investigator.get('xnatInvestigatordataId')  
 
