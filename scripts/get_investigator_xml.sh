@@ -5,11 +5,11 @@
 #              Boiler Plate
 #              Output folder
 
-get_project_xml_files() {
+get_investigator_xml_files() {
     export PYTHONPATH="$1/../src"
 
-    echo python3 -m xnat_cli_scripts.projects $2 --get --project_xml --output_folder $3
-         python3 -m xnat_cli_scripts.projects $2 --get --project_xml --output_folder $3
+    echo python3 -m xnat_cli_scripts.investigators $2 --get --investigator_xml --output_folder $3
+         python3 -m xnat_cli_scripts.investigators $2 --get --investigator_xml --output_folder $3
 }
 
 # Main starts here
@@ -33,4 +33,4 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-get_project_xml_files "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt " test_data/active_project_xml
+get_investigator_xml_files "$BASE_FOLDER" "$BOILER_PLATE " test_data/investigator_xml
