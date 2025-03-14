@@ -139,9 +139,6 @@ def execute_list_project_users(connection: xnat.session.XNATSession, args: argpa
 
         for user in user_results:
             print(f"{project_id}\t{user['login']}")
-        
-        # Apply sleep after processing each project's users
-        apply_sleep(args)
 
 
 def execute_list_project_groups(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
@@ -177,9 +174,56 @@ def execute_list_project_groups(connection: xnat.session.XNATSession, args: argp
         for user in user_results:
             print(f"{project_id}\t{user['login']}\t{user['GROUP_ID']}")
         
-        # Apply sleep after processing each project's groups
-        apply_sleep(args)
+def execute_list_anon_status(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+    """
+    Lists anonymization status for projects, printing a CSV output with:
+      {project_id},{true/false} (if anonymization script exists)
 
+    If --csv is provided, only checks the listed projects.
+    """
+    output_file = "test_data/anon_status.csv"
+    project_ids = []
+
+    # Check if CSV input is provided and load project IDs
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except FileNotFoundError:
+            print(f"[ERROR] CSV file not found: {args.csv_file}")
+            return
+        except Exception as e:
+            print(f"[ERROR] Exception while reading CSV: {e}")
+            return
+
+    # If no CSV provided, get all projects
+    if not project_ids:
+        all_projects = connection.get_json("/data/projects")
+        if 'ResultSet' in all_projects and 'Result' in all_projects['ResultSet']:
+            project_ids = [proj['ID'] for proj in all_projects['ResultSet']['Result']]
+
+    # Check anonymization status for each project
+    anon_statuses = []
+    for project_id in project_ids:
+        anon_url = f"/data/projects/{project_id}/config/anonScript"
+        try:
+            response = connection.get_json(anon_url)
+            has_anon_script = "true" if response else "false"
+        except xnat.exceptions.XNATResponseError as e:
+            if e.status_code == 404:
+                has_anon_script = "false"  # No script found
+            else:
+                print(f"[ERROR] Failed to fetch anonymization status for {project_id}: {e}")
+                continue
+
+        anon_statuses.append(f"{project_id},{has_anon_script}")
+
+    # Save results as CSV
+    with open(output_file, mode='w', newline='') as file:
+        file.write("\n".join(anon_statuses))
+
+    print(f"[INFO] Anonymization status check completed.")
 
 def execute_remove_groups(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -392,7 +436,9 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
 
 def execute_list_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     # Check for LIST actions first
-    if args.users:
+    if args.anon:
+        execute_list_anon_status(connection, args)  
+    elif args.users:
         execute_list_project_users(connection, args)
     elif args.groups:
         execute_list_project_groups(connection, args)
@@ -400,6 +446,7 @@ def execute_list_master(connection: xnat.session.XNATSession, args: argparse.Nam
         execute_list_project_accessibilities(connection, args)
     else:
         execute_list_projects(connection, args)
+
 
 
 def execute_remove_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
@@ -600,6 +647,8 @@ if __name__ == "__main__":
     parser.add_argument(      '--subjects',        dest='subjects',                 help="Include list of subjects in output",         action='store_true')
     parser.add_argument(      '--sessions',        dest='sessions',                 help="Include list of sessions in output",         action='store_true')
     parser.add_argument(      '--project_xml',     dest='project_xml',              help='Extract/Operate on Project XML',             action='store_true')
+    parser.add_argument(      '--anon',            dest='anon',                     help="List anonymization status for projects",     action='store_true')
+
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
