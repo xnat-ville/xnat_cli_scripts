@@ -19,6 +19,7 @@ import requests
 import csv
 import time
 import warnings
+import json
 from pathlib import Path
 from os import listdir
 from os.path import isfile
@@ -468,64 +469,42 @@ def execute_get_project_xml(connection: xnat.session.XNATSession, args: argparse
 
 def execute_get_series_import_filter(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     """
-    Retrieves series import filter configuration for each project and saves it as a JSON file.
-    The output is saved as: <output_folder>/<project ID>.seriesImportFilter.json
+    Retrieves the Series Import Filter for each project and saves it as a JSON file.
     """
+    output_folder = args.output_folder if args.output_folder else "test_data/series_import_filters"
+    Path(output_folder).mkdir(parents=True, exist_ok=True)
 
-    # Ensure the output directory exists
-    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
-
-    # Retrieve all projects
-    all_projects = connection.get_json("/data/projects")
-    apply_sleep(args)
-
-    if not all_projects or 'ResultSet' not in all_projects or 'Result' not in all_projects['ResultSet']:
-        print("[ERROR] Failed to retrieve project list.")
-        return
-
-    project_list = all_projects['ResultSet']['Result']
-
-    # If CSV file is provided, filter projects based on it
-    project_ids_from_csv = None
+    project_ids = []
     if args.csv_file:
-        try:
-            with open(args.csv_file, mode='r') as file:
-                csv_reader = csv.reader(file, delimiter='\t')
-                project_ids_from_csv = [row[0].strip() for row in csv_reader if row]
-        except FileNotFoundError:
-            print(f"[ERROR] CSV file not found: {args.csv_file}")
-            return
-        except Exception as e:
-            print(f"[ERROR] Exception while reading CSV: {e}")
-            return
+        with open(args.csv_file, mode='r') as file:
+            project_ids = [row.strip() for row in file.readlines() if row.strip()]
+    else:
+        all_projects = connection.get_json("/data/projects")
+        project_ids = [p['ID'] for p in all_projects['ResultSet']['Result']]
 
-        # Filter the project list to only include those in the CSV file
-        project_list = [p for p in project_list if p['ID'] in project_ids_from_csv]
+    found_count = 0
+    missing_count = 0
 
-    saved_count = 0
-    not_found = []
-
-    # Fetch and save Series Import Filter for each project
-    for project in project_list:
-        project_id = project['ID']
+    for project_id in project_ids:
         sif_url = f"/data/projects/{project_id}/config/seriesImportFilter"
 
-        response = connection.get_json(sif_url)
-        apply_sleep(args)
+        try:
+            response = connection.get_json(sif_url)
+            if response:
+                with open(f"{output_folder}/{project_id}.seriesImportFilter.json", "w", encoding="utf-8") as f:
+                    json.dump(response, f, indent=4)
+                found_count += 1
+            else:
+                missing_count += 1
 
-        if response:
-            output_file = f"{args.output_folder}/{project_id}.seriesImportFilter.json"
-            with open(output_file, "w", encoding="utf-8") as f:
-                json.dump(response, f, indent=4)
-            saved_count += 1
-        else:
-            not_found.append(project_id)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                missing_count += 1
 
-    # Final print statement summarizing results
-    print(f"[INFO] Successfully saved {saved_count} series import filter files.")
-    
-    if not_found:
-        print(f"[WARNING] No series import filter found for {len(not_found)} projects: {', '.join(not_found)}")
+    # Final summary message
+    print(f"[INFO] Successfully saved {found_count} Series Import Filters.")
+    print(f"[INFO] {missing_count} projects did not have a Series Import Filter.")
+
 
 def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     """
