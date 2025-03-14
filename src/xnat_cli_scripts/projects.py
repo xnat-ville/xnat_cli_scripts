@@ -552,6 +552,44 @@ def execute_get_series_import_filter(connection: xnat.session.XNATSession, args:
     print(f"[INFO] Successfully saved {found_count} Series Import Filters.")
     print(f"[INFO] {missing_count} projects did not have a Series Import Filter.")
 
+def execute_get_anon_scripts(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves anonymization scripts from XNAT projects and saves them to an output folder.
+    Only saves scripts for projects that have one enabled.
+    """
+
+    output_folder = args.output_folder if args.output_folder else "test_data/anon_scripts"
+    Path(output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Retrieve project list
+    all_projects = connection.get_json("/data/projects")
+    project_list = all_projects.get("ResultSet", {}).get("Result", [])
+
+    success_count = 0
+    not_found_count = 0
+
+    for project in project_list:
+        project_id = project.get("ID")
+        if not project_id:
+            continue  # Skip invalid projects
+
+        anon_url = f"/data/projects/{project_id}/config/anonymize?format=json"
+
+        try:
+            response = connection.get_json(anon_url)
+            if response:
+                file_path = f"{output_folder}/{project_id}.anon.txt"
+                with open(file_path, "w", encoding="utf-8") as f:
+                    json.dump(response, f, indent=4)
+                success_count += 1
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):  # Handle missing anonymization script
+                not_found_count += 1
+            else:
+                print(f"[ERROR] Unexpected error for {project_id}: {e}")
+
+    print(f"[INFO] Successfully saved anonymization scripts for {success_count} projects.")
+    print(f"[INFO] {not_found_count} projects had no anonymization script.")
 
 def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     """
@@ -572,8 +610,15 @@ def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Name
             else:
                 print("[WARNING] No output folder provided. Please specify --output_folder.")
             return
+        
+        elif args.anon:
+            if args.output_folder:
+                execute_get_anon_scripts(connection, args)
+            else:
+                print("[WARNING] No output folder provided. Please specify --output_folder.")
+            return
 
-    print("[ERROR] No valid 'GET' action specified. Use --project_xml or --seriesImportFilter.")
+    print("[ERROR] No valid 'GET' action specified. Use --project_xml, --seriesImportFilter, or --anon.")
 
 #def execute_project_list(session: xnat.session.XNATSession, args: argparse.Namespace) -> None:
 #
