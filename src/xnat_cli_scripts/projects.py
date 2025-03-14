@@ -441,8 +441,6 @@ def execute_update_master(connection: xnat.session.XNATSession, args: argparse.N
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml or -g and --csv.")
 
-
-
 def execute_get_project_xml(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
@@ -468,19 +466,88 @@ def execute_get_project_xml(connection: xnat.session.XNATSession, args: argparse
         f.write(xml.content.decode("utf-8"))
         f.close()
 
+def execute_get_series_import_filter(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves series import filter configuration for each project and saves it as a JSON file.
+    The output is saved as: <output_folder>/<project ID>.seriesImportFilter.json
+    """
 
-def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
-    # Check for UPDATE action (Change Groups)
-    if args.get and args.project_xml:
-        if args.output_folder:
-            execute_get_project_xml(connection, args)
-        else:
-            print("[WARNING] No output folder provided. Please specify --output_folder.")
+    # Ensure the output directory exists
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Retrieve all projects
+    all_projects = connection.get_json("/data/projects")
+    apply_sleep(args)
+
+    if not all_projects or 'ResultSet' not in all_projects or 'Result' not in all_projects['ResultSet']:
+        print("[ERROR] Failed to retrieve project list.")
         return
 
+    project_list = all_projects['ResultSet']['Result']
 
+    # If CSV file is provided, filter projects based on it
+    project_ids_from_csv = None
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids_from_csv = [row[0].strip() for row in csv_reader if row]
+        except FileNotFoundError:
+            print(f"[ERROR] CSV file not found: {args.csv_file}")
+            return
+        except Exception as e:
+            print(f"[ERROR] Exception while reading CSV: {e}")
+            return
 
+        # Filter the project list to only include those in the CSV file
+        project_list = [p for p in project_list if p['ID'] in project_ids_from_csv]
 
+    saved_count = 0
+    not_found = []
+
+    # Fetch and save Series Import Filter for each project
+    for project in project_list:
+        project_id = project['ID']
+        sif_url = f"/data/projects/{project_id}/config/seriesImportFilter"
+
+        response = connection.get_json(sif_url)
+        apply_sleep(args)
+
+        if response:
+            output_file = f"{args.output_folder}/{project_id}.seriesImportFilter.json"
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(response, f, indent=4)
+            saved_count += 1
+        else:
+            not_found.append(project_id)
+
+    # Final print statement summarizing results
+    print(f"[INFO] Successfully saved {saved_count} series import filter files.")
+    
+    if not_found:
+        print(f"[WARNING] No series import filter found for {len(not_found)} projects: {', '.join(not_found)}")
+
+def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+    """
+    Master function to handle different 'GET' operations.
+    """
+
+    if args.get:
+        if args.project_xml:
+            if args.output_folder:
+                execute_get_project_xml(connection, args)
+            else:
+                print("[WARNING] No output folder provided. Please specify --output_folder.")
+            return
+
+        elif args.seriesImportFilter:
+            if args.output_folder:
+                execute_get_series_import_filter(connection, args)
+            else:
+                print("[WARNING] No output folder provided. Please specify --output_folder.")
+            return
+
+    print("[ERROR] No valid 'GET' action specified. Use --project_xml or --seriesImportFilter.")
 
 #def execute_project_list(session: xnat.session.XNATSession, args: argparse.Namespace) -> None:
 #
@@ -516,8 +583,6 @@ def execute_subject_list(session: xnat.session.XNATSession, args: argparse.Names
                 x = ""
                 y = ""
 
-
-
 def format_session_header_rows() -> str:
     return "Project ID, Project Label, ID, Label, Insert Date, Modality, Scan Count"
 def format_session_data(p) -> str:
@@ -551,7 +616,8 @@ if __name__ == "__main__":
     # These are objects of the operations; 
     parser.add_argument('-u', '--users',           dest='users',                    help='Listing Verb object: Users',                 action='store_true')
     parser.add_argument('-g', '--groups',          dest='groups',                   help='Object: Groups (for both LIST and REMOVE)',  action='store_true')
-    parser.add_argument(      '--accessibilities', dest='accessibilities',          help="Accessibilities for projects",                action='store_true')
+    parser.add_argument(    '--seriesImportFilter',dest='seriesImportFilter',       help="Extract series import filter for projects",  action='store_true')
+    parser.add_argument(      '--accessibilities', dest='accessibilities',          help="Accessibilities for projects",               action='store_true')
     parser.add_argument(      '--subjects',        dest='subjects',                 help="Include list of subjects in output",         action='store_true')
     parser.add_argument(      '--sessions',        dest='sessions',                 help="Include list of sessions in output",         action='store_true')
     parser.add_argument(      '--project_xml',     dest='project_xml',              help='Extract/Operate on Project XML',             action='store_true')
