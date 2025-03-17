@@ -174,10 +174,10 @@ def execute_list_project_groups(connection: xnat.session.XNATSession, args: argp
         for user in user_results:
             print(f"{project_id}\t{user['login']}\t{user['GROUP_ID']}")
         
-def execute_list_anon_status(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_list_anon_status(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Lists anonymization status for projects, printing a CSV output with:
-      {project_id},{true/false} (if anonymization script exists)
+      {project_id},{true/false} (if anonymization script exists).
 
     If --csv is provided, only checks the listed projects.
     """
@@ -191,10 +191,8 @@ def execute_list_anon_status(connection: xnat.session.XNATSession, args: argpars
                 csv_reader = csv.reader(file, delimiter='\t')
                 project_ids = [row[0].strip() for row in csv_reader if row]
         except FileNotFoundError:
-            print(f"[ERROR] CSV file not found: {args.csv_file}")
             return
-        except Exception as e:
-            print(f"[ERROR] Exception while reading CSV: {e}")
+        except Exception:
             return
 
     # If no CSV provided, get all projects
@@ -206,24 +204,22 @@ def execute_list_anon_status(connection: xnat.session.XNATSession, args: argpars
     # Check anonymization status for each project
     anon_statuses = []
     for project_id in project_ids:
-        anon_url = f"/data/projects/{project_id}/config/anonScript"
+        anon_url = f"/data/projects/{project_id}/config/anon"
         try:
             response = connection.get_json(anon_url)
-            has_anon_script = "true" if response else "false"
+            has_anon_script = "true" if response and isinstance(response, dict) else "false"
         except xnat.exceptions.XNATResponseError as e:
-            if e.status_code == 404:
-                has_anon_script = "false"  # No script found
-            else:
-                print(f"[ERROR] Failed to fetch anonymization status for {project_id}: {e}")
-                continue
+            has_anon_script = "false" if hasattr(e, "status") and e.status == 404 else None
 
-        anon_statuses.append(f"{project_id},{has_anon_script}")
+        if has_anon_script is not None:
+            anon_statuses.append(f"{project_id},{has_anon_script}")
 
     # Save results as CSV
     with open(output_file, mode='w', newline='') as file:
         file.write("\n".join(anon_statuses))
 
-    print(f"[INFO] Anonymization status check completed.")
+    print("[INFO] Anonymization status check completed.")
+
 
 def execute_remove_groups(connection: XNATSession, args: argparse.Namespace) -> None:
     """
