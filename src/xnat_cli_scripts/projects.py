@@ -552,40 +552,52 @@ def execute_get_anon_scripts(connection: xnat.session.XNATSession, args: argpars
     """
     Retrieves anonymization scripts from XNAT projects and saves them to an output folder.
     Only saves scripts for projects that have one enabled.
+    If --csv is provided, only checks the listed projects.
     """
 
     output_folder = args.output_folder if args.output_folder else "test_data/anon_scripts"
     Path(output_folder).mkdir(parents=True, exist_ok=True)
 
-    # Retrieve project list
-    all_projects = connection.get_json("/data/projects")
-    project_list = all_projects.get("ResultSet", {}).get("Result", [])
+    project_ids = []
 
-    success_count = 0
-    not_found_count = 0
+    # Check if CSV input is provided and load project IDs
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except FileNotFoundError:
+            print(f"[ERROR] CSV file not found: {args.csv_file}")
+            return
+        except Exception as e:
+            print(f"[ERROR] Exception while reading CSV: {e}")
+            return
 
-    for project in project_list:
-        project_id = project.get("ID")
-        if not project_id:
-            continue  # Skip invalid projects
+    # If no CSV provided, get all projects
+    if not project_ids:
+        all_projects = connection.get_json("/data/projects")
+        if 'ResultSet' in all_projects and 'Result' in all_projects['ResultSet']:
+            project_ids = [proj['ID'] for proj in all_projects['ResultSet']['Result']]
 
-        anon_url = f"/data/projects/{project_id}/config/anonymize?format=json"
-
+    # Check anonymization script for each project
+    for project_id in project_ids:
+        anon_url = f"/data/projects/{project_id}/config/anon"  
         try:
             response = connection.get_json(anon_url)
+
+            # Ensure response is valid and contains the anonymization script
             if response:
-                file_path = f"{output_folder}/{project_id}.anon.txt"
+                file_path = f"{output_folder}/{project_id}.anon.json"
                 with open(file_path, "w", encoding="utf-8") as f:
                     json.dump(response, f, indent=4)
-                success_count += 1
+
         except xnat.exceptions.XNATResponseError as e:
-            if "404" in str(e):  # Handle missing anonymization script
-                not_found_count += 1
+            if e.status_code == 404:
+                continue  # Skip projects without an anonymization script
             else:
                 print(f"[ERROR] Unexpected error for {project_id}: {e}")
 
-    print(f"[INFO] Successfully saved anonymization scripts for {success_count} projects.")
-    print(f"[INFO] {not_found_count} projects had no anonymization script.")
+    print("[INFO] Anonymization scripts retrieval completed.")
 
 def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     """
