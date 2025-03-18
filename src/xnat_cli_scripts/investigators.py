@@ -33,14 +33,6 @@ def apply_sleep(args: argparse.Namespace) -> None:
         except ValueError:
             print("[ERROR] Invalid sleep value. Please provide a valid number.")
 
-import json  # JSON module to save files correctly
-
-import json
-from pathlib import Path
-
-import json
-from pathlib import Path
-
 def execute_get_investigator_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     
     #Retrieves investigator data from XNAT and saves each investigator as an individual JSON file.
