@@ -497,11 +497,10 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
 
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
-    # Check for LIST actions first
     if args.scan_types:
         execute_list_scan_types(connection, args)
     elif args.anon:
-        execute_list_anon_status(connection, args)  
+        execute_list_anon_status(connection, args)
     elif args.users:
         execute_list_project_users(connection, args)
     elif args.groups:
@@ -511,43 +510,21 @@ def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> No
     else:
         execute_list_projects(connection, args)
 
-def execute_remove_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
-    # Check for REMOVE action
-    if args.remove and args.groups:
-        # If CSV is provided, use it to get groups for removal
-        if args.csv_file:
-            execute_remove_groups(connection, args)
-        else:
-            print("[WARNING] No CSV file provided. Please specify --csv for group removal.")
-    else:
-        print("[WARNING] Invalid REMOVE action. Use -R with -g and --csv.")
+def execute_remove_master(connection: XNATSession, args: argparse.Namespace) -> None:
+    if args.groups:
+        execute_remove_groups(connection, args)
 
 
-def execute_update_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
-    # Check for UPDATE action (Change Groups)
-    if args.update and args.groups:
-        # If CSV is provided, use it for changing groups
-        if args.csv_file:
-            execute_update_groups(connection, args)
-        else:
-            print("[WARNING] No CSV file provided. Please specify --csv for changing groups.")
-        return  # Exit after changing groups
-
-    # Check for UPDATE action (Update Accessibilities)
-    if args.update and args.accessibilities:
-        # If CSV is provided, use it for updating accessibilities
-        if args.csv_file:
-            execute_update_accessibilities(connection, args)
-        else:
-            print("[WARNING] No CSV file provided. Please specify --csv for updating accessibilities.")
-        return
-
-    # Check for UPDATE action (Update Project XML)
-    if args.update and args.project_xml:
+def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> None:
+    if args.groups:
+        execute_update_groups(connection, args)
+    elif args.accessibilities:
+        execute_update_accessibilities(connection, args)
+    elif args.project_xml:
         if args.input_folder:
             execute_update_project_xml(connection, args)
         else:
-            print("[WARNING] No CSV file provided. Please specify --csv for updating project_xml.")
+            print("[WARNING] No input folder provided for project XML update.")
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml or -g and --csv.")
 
@@ -576,7 +553,7 @@ def execute_get_project_xml(connection: xnat.session.XNATSession, args: argparse
         f.write(xml.content.decode("utf-8"))
         f.close()
 
-def execute_get_series_import_filter(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_get_series_import_filter_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves the Series Import Filter for each project and saves it as a JSON file.
     """
@@ -614,7 +591,7 @@ def execute_get_series_import_filter(connection: xnat.session.XNATSession, args:
     print(f"[INFO] Successfully saved {found_count} Series Import Filters.")
     print(f"[INFO] {missing_count} projects did not have a Series Import Filter.")
 
-def execute_get_anon_scripts(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_get_anon_scripts_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves anonymization scripts from XNAT projects and saves them to an output folder.
     Only saves scripts for projects that have one enabled.
@@ -725,37 +702,20 @@ def execute_get_scan_types_json(connection: XNATSession, args: argparse.Namespac
 
     print("[INFO] Scan types retrieval and JSON saving completed.")
 
-
-def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
-    """
-    Master function to handle different 'GET' operations.
-    """
-
-    if args.get:
-        if args.project_xml:
-            if args.output_folder:
-                execute_get_project_xml(connection, args)
-            else:
-                print("[WARNING] No output folder provided. Please specify --output_folder.")
-            return
-
-        elif args.seriesImportFilter:
-            if args.output_folder:
-                execute_get_series_import_filter(connection, args)
-            else:
-                print("[WARNING] No output folder provided. Please specify --output_folder.")
-            return
-        
-        elif args.anon:
-            if args.output_folder:
-                execute_get_anon_scripts(connection, args)
-            else:
-                print("[WARNING] No output folder provided. Please specify --output_folder.")
-            return
-
-        elif args.scan_types:
-            execute_get_scan_types_json(connection, args)
-            return
+def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
+    if args.project_xml:
+        if args.output_folder:
+            execute_get_project_xml(connection, args)
+        else:
+            print("[WARNING] No output folder provided.")
+    elif args.seriesImportFilter:
+        execute_get_series_import_filter_json(connection, args)
+    elif args.anon:
+        execute_get_anon_scripts_json(connection, args)
+    elif args.scan_types:
+        execute_get_scan_types_json(connection, args)
+    else:
+        print("[ERROR] No valid 'GET' action specified.")
 
     print("[ERROR] No valid 'GET' action specified. Use --project_xml, --seriesImportFilter, --anon, or --scan_types.")
 
