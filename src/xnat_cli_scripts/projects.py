@@ -708,7 +708,8 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
             execute_get_project_xml(connection, args)
         else:
             print("[WARNING] No output folder provided.")
-            return
+        return  
+
     if args.seriesImportFilter:
         execute_get_series_import_filter_json(connection, args)
         return
@@ -718,7 +719,9 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
     if args.scan_types:
         execute_get_scan_types_json(connection, args)
         return
+
     print("[ERROR] No valid 'GET' action specified.")
+
 
 #def execute_project_list(session: XNATSession, args: argparse.Namespace) -> None:
 #
