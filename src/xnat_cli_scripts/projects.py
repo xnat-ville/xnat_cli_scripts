@@ -27,6 +27,7 @@ from os.path import isfile
 #import xnat.core
 import xnat.mixin
 from xnat.session import XNATSession
+from xnat.exceptions import XNATResponseError
 import xnat_cli_scripts.cli_common
 warnings.filterwarnings('ignore')
 
@@ -220,6 +221,71 @@ def execute_list_anon_status(connection: XNATSession, args: argparse.Namespace) 
 
     print("[INFO] Anonymization status check completed.")
 
+def execute_list_scan_types(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Lists scan types for projects, printing a CSV output where:
+      project_id, scan_type
+
+    If --csv_file is provided, only checks the listed projects.
+    """
+    output_file = "test_data/scan_types.csv"  # Directly using test_data since it always exists
+
+    project_ids = []
+
+    # Load project IDs from CSV if provided
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except FileNotFoundError:
+            print(f"Error: CSV file '{args.csv_file}' not found.")
+            return
+        except Exception as e:
+            print(f"Error reading CSV file: {e}")
+            return
+
+    # If no CSV provided, get all project IDs from XNAT
+    if not project_ids:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [
+                proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])
+            ]
+        except RequestException as e:
+            print(f"Error fetching projects: {e}")
+            return
+
+    if not project_ids:
+        print("No projects found.")
+        return
+
+    # Write scan types to CSV (one row per scan type)
+    try:
+        with open(output_file, mode='w', newline='') as file:
+            csv_writer = csv.writer(file)
+            csv_writer.writerow(["project_id", "scan_type"])  # Header
+
+            for project_id in project_ids:
+                try:
+                    scan_types_response = connection.get_json(f"/data/projects/{project_id}/scan_types")
+                    scan_types = [
+                        item['type'] for item in scan_types_response.get('ResultSet', {}).get('Result', [])
+                    ]
+
+                    # Write each scan type on a new line
+                    for scan_type in scan_types:
+                        csv_writer.writerow([project_id, scan_type])
+
+                except RequestException as e:
+                    print(f"Error fetching scan types for project '{project_id}': {e}")
+
+        print(f"Scan types successfully written to {output_file}")
+
+    except PermissionError:
+        print(f"Error: Unable to write to {output_file}. Close the file if it's open and try again.")
+    except Exception as e:
+        print(f"Unexpected error writing to CSV file: {e}")
 
 def execute_remove_groups(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -430,9 +496,11 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
             print(f"[ERROR] Exception while reading through folder: {args.input_folder}")
 
 
-def execute_list_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
     # Check for LIST actions first
-    if args.anon:
+    if args.scan_types:
+        execute_list_scan_types(connection, args)
+    elif args.anon:
         execute_list_anon_status(connection, args)  
     elif args.users:
         execute_list_project_users(connection, args)
@@ -442,8 +510,6 @@ def execute_list_master(connection: xnat.session.XNATSession, args: argparse.Nam
         execute_list_project_accessibilities(connection, args)
     else:
         execute_list_projects(connection, args)
-
-
 
 def execute_remove_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     # Check for REMOVE action
@@ -701,7 +767,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--sessions',        dest='sessions',                 help="Include list of sessions in output",         action='store_true')
     parser.add_argument(      '--project_xml',     dest='project_xml',              help='Extract/Operate on Project XML',             action='store_true')
     parser.add_argument(      '--anon',            dest='anon',                     help="List anonymization status for projects",     action='store_true')
-
+    parser.add_argument(      '--scan_types',      dest='scan_types',               help='List scan types',                            action='store_true')
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
