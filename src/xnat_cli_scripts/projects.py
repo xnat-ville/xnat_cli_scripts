@@ -71,7 +71,7 @@ def format_project_id_name(p) -> str:
     return f"{p.id}, {p.name}"
 
 
-def execute_list_projects(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_list_projects(connection: XNATSession, args: argparse.Namespace) -> None:
     
     if args.csv_file:
         # Read project IDs from CSV file
@@ -104,7 +104,7 @@ def execute_list_projects(connection: xnat.session.XNATSession, args: argparse.N
             apply_sleep(args)
 
 
-def execute_list_project_users(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_list_project_users(connection: XNATSession, args: argparse.Namespace) -> None:
     # Check if CSV file is provided
     if args.csv_file:  # Correctly reference args.csv_file
         # Read the CSV file and get the list of project IDs
@@ -142,7 +142,7 @@ def execute_list_project_users(connection: xnat.session.XNATSession, args: argpa
             print(f"{project_id}\t{user['login']}")
 
 
-def execute_list_project_groups(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_list_project_groups(connection: XNATSession, args: argparse.Namespace) -> None:
     all_projects = session.get_json(f"/data/projects")
     # Apply sleep after the main REST call
     apply_sleep(args)
@@ -528,7 +528,7 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml or -g and --csv.")
 
-def execute_get_project_xml(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_get_project_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
     project_ids = []
@@ -553,7 +553,7 @@ def execute_get_project_xml(connection: xnat.session.XNATSession, args: argparse
         f.write(xml.content.decode("utf-8"))
         f.close()
 
-def execute_get_series_import_filter_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_get_series_import_filter_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves the Series Import Filter for each project and saves it as a JSON file.
     """
@@ -591,7 +591,7 @@ def execute_get_series_import_filter_json(connection: xnat.session.XNATSession, 
     print(f"[INFO] Successfully saved {found_count} Series Import Filters.")
     print(f"[INFO] {missing_count} projects did not have a Series Import Filter.")
 
-def execute_get_anon_scripts_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves anonymization scripts from XNAT projects and saves them to an output folder.
     Only saves scripts for projects that have one enabled.
@@ -721,7 +721,7 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
         return
     print("[ERROR] No valid 'GET' action specified.")
 
-#def execute_project_list(session: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+#def execute_project_list(session: XNATSession, args: argparse.Namespace) -> None:
 #
 #    print(format_project_header_rows())
 #    all_projects = session.get_json(f"/data/projects")
@@ -743,7 +743,7 @@ def format_subject_header_rows() -> str:
 def format_subject_data(p) -> str:
     return f"{p.id}, {p.label}, {p.insert_date}, {len(p.experiments)} "
 
-def execute_subject_list(session: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_subject_list(session: XNATSession, args: argparse.Namespace) -> None:
 
     if (args.subjects):
         print("\nSubject List")
@@ -760,7 +760,7 @@ def format_session_header_rows() -> str:
 def format_session_data(p) -> str:
     return f"{p.id}, {p.label}, {p.insert_date}, {p.modality}, {len(p.scans)} "
 
-def execute_session_list(session: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_session_list(session: XNATSession, args: argparse.Namespace) -> None:
 
     if (args.sessions):
         print ("\nSession List")
