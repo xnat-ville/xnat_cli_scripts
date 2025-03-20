@@ -665,6 +665,67 @@ def execute_get_anon_scripts(connection: xnat.session.XNATSession, args: argpars
 
     print("[INFO] Anonymization scripts retrieval completed.")
 
+
+def execute_get_scan_types_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves scan types from XNAT projects and saves them as separate JSON files.
+    Each project's scan types are saved in `test_data/scan_types/{project_id}.json`.
+
+    If --csv_file is provided, only checks the listed projects.
+    """
+    output_folder = "test_data/scan_types"
+    Path(output_folder).mkdir(parents=True, exist_ok=True)  # Ensure folder exists
+
+    project_ids = []
+
+    # Load project IDs from CSV if provided
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except FileNotFoundError:
+            print(f"[ERROR] CSV file not found: {args.csv_file}")
+            return
+        except Exception as e:
+            print(f"[ERROR] Exception while reading CSV: {e}")
+            return
+
+    # If no CSV provided, get all projects
+    if not project_ids:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [
+                proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])
+            ]
+        except RequestException as e:
+            print(f"[ERROR] Failed to fetch projects: {e}")
+            return
+
+    # Retrieve scan types for each project
+    for project_id in project_ids:
+        scan_url = f"/data/projects/{project_id}/scan_types"
+        try:
+            response = connection.get_json(scan_url)
+
+            # Ensure response contains scan types
+            if response and 'ResultSet' in response and 'Result' in response['ResultSet']:
+                scan_types = [item['type'] for item in response['ResultSet']['Result']]
+                
+                # Skip saving if no scan types exist
+                if not scan_types:
+                    continue  
+
+                file_path = f"{output_folder}/{project_id}.json"
+                with open(file_path, "w", encoding="utf-8") as f:
+                    json.dump({"project_id": project_id, "scan_types": scan_types}, f, indent=4)
+
+        except RequestException as e:
+            print(f"[ERROR] Failed to fetch scan types for {project_id}: {e}")
+
+    print("[INFO] Scan types retrieval and JSON saving completed.")
+
+
 def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     """
     Master function to handle different 'GET' operations.
@@ -692,7 +753,11 @@ def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Name
                 print("[WARNING] No output folder provided. Please specify --output_folder.")
             return
 
-    print("[ERROR] No valid 'GET' action specified. Use --project_xml, --seriesImportFilter, or --anon.")
+        elif args.scan_types:
+            execute_get_scan_types_json(connection, args)
+            return
+
+    print("[ERROR] No valid 'GET' action specified. Use --project_xml, --seriesImportFilter, --anon, or --scan_types.")
 
 #def execute_project_list(session: xnat.session.XNATSession, args: argparse.Namespace) -> None:
 #
