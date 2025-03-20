@@ -10,15 +10,17 @@ Example usage:
 """
 
 import argparse
+import time
+import warnings
+from pathlib import Path
+from os import listdir
+import json
 import requests
 import xnat
 import xnat.core
 import xnat.mixin
 from xnat.session import XNATSession
-import time
-import warnings
-from pathlib import Path
-import json 
+
 import xnat_cli_scripts.cli_common
 
 warnings.filterwarnings('ignore')
@@ -66,17 +68,55 @@ def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Name
     else:
         print("[WARNING] No valid GET action specified. Use --get --investigator_json.")
 
+
+# Reads a folder containing JSON files with individual Investigator records and PUT's them into XNAT
+def execute_update_investigator_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+    if args.input_folder is None:
+        raise Exception("investigators --update --investigator_json requires --input_folder")
+
+    try:
+        http_headers = {}
+        http_headers['Content-Type'] = 'application/json'
+        listing = listdir(args.input_folder)
+        for f in listing:
+            print(f)
+            with open(f"{args.input_folder}/{f}") as json_file:
+                components = f.split('.')
+                investigator_id = components[0]
+                put_path=f"/xapi/investigators/{investigator_id}"
+                connection.put(put_path, data=json_file, headers=http_headers)
+                json_file.close()
+
+    except Exception as e:
+        raise Exception(f"[ERROR] Exception while reading through folder: {args.input_folder}\n{e}")
+
+    print(f"Successfully updated investigator JSON files")
+
+def execute_update_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+    if args.update and args.investigator_json:
+        execute_update_investigator_json(connection, args)
+    else:
+        print("[WARNING] No valid update action specified. Use --update --investigator_json.")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract investigator JSON from XNAT")
-    parser.add_argument('-x', '--xnat', dest='url', help="URL to XNAT instance", required=True)
-    parser.add_argument('-a', '--auth', dest='auth', help="User authentication/login", required=True)
-    parser.add_argument('-p', '--password', dest='password', help="Password for XNAT authentication", required=False)
-    parser.add_argument('-e', '--extension_types', dest='extension_types', help="True or False for extension_types in xnat.connect")
+    parser.add_argument('-x', '--xnat',              dest='url',                help="URL to XNAT instance",             required=True)
+    parser.add_argument('-a', '--auth',              dest='auth',               help="User authentication/login",        required=True)
+    parser.add_argument('-p', '--password',          dest='password',           help="Password for XNAT authentication", required=False)
+    parser.add_argument('-e', '--extension_types',   dest='extension_types',    help="True or False for extension_types in xnat.connect")
 
-    parser.add_argument('--get', dest='get', help="Action to GET investigator JSON", action='store_true')
-    parser.add_argument('--investigator_json', dest='investigator_json', help="Extract investigator JSON", action='store_true')
-    parser.add_argument('--output_folder', dest='output_folder', help="Folder to store investigator JSON files")
-    parser.add_argument('-s', '--sleep', dest='sleep', help="Time to sleep after each REST call")
+    ## These are operations
+    parser.add_argument(      '--get',               dest='get',                help="Action is GET investigator JSON", action='store_true')
+    parser.add_argument(      '--update',            dest='update',             help='Action is UPDATE (PUT',           action='store_true')
+
+    # These are objects of the operations
+    parser.add_argument(      '--investigator_json', dest='investigator_json',  help="Extract investigator JSON",       action='store_true')
+    parser.add_argument(      '--output_folder',     dest='output_folder',      help="Folder to store investigator JSON files")
+    parser.add_argument(      '--input_folder',      dest='input_folder',       help="Folder with input JSON files")
+
+    ## Further modifiers
+    parser.add_argument('-s', '--sleep',             dest='sleep',              help="Time to sleep after each REST call")
 
     args = parser.parse_args()
 
@@ -88,7 +128,9 @@ if __name__ == "__main__":
 
     if args.get:
         execute_get_master(session, args)
+    elif args.update:
+        execute_update_master(session, args)
     else:
-        print("[ERROR] No valid action specified. Use --get.")
+        print("[ERROR] No valid action specified. Use --get or --update.")
 
     session.disconnect()
