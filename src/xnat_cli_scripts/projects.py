@@ -83,14 +83,14 @@ def execute_list_projects(connection: XNATSession, args: argparse.Namespace) -> 
 
         # List only the projects from the CSV
         for project_id in project_ids:
-            project_object = session.projects.get(project_id)
+            project_object = connection.projects.get(project_id)
             if project_object:
                 print(format_project_data({}, project_object, args))
                 # Apply sleep after processing each project
                 apply_sleep(args)
     else:
         # List all projects as usual
-        all_projects = session.get_json(f"/data/projects")
+        all_projects = connection.get_json(f"/data/projects")
         # Apply sleep after the REST call (moved up here)
         apply_sleep(args)
 
@@ -98,7 +98,7 @@ def execute_list_projects(connection: XNATSession, args: argparse.Namespace) -> 
         result = result_set['Result']
 
         for project_json in result:
-            project_object = session.projects[project_json['ID']]
+            project_object = connection.projects[project_json['ID']]
             print(format_project_data(project_json, project_object, args))
             # Apply sleep after processing each project
             apply_sleep(args)
@@ -117,7 +117,7 @@ def execute_list_project_users(connection: XNATSession, args: argparse.Namespace
     else:
         project_ids_from_csv = None
 
-    all_projects = session.get_json(f"/data/projects")
+    all_projects = connection.get_json(f"/data/projects")
     # Apply sleep after the main REST call
     apply_sleep(args)
 
@@ -143,7 +143,7 @@ def execute_list_project_users(connection: XNATSession, args: argparse.Namespace
 
 
 def execute_list_project_groups(connection: XNATSession, args: argparse.Namespace) -> None:
-    all_projects = session.get_json(f"/data/projects")
+    all_projects = connection.get_json(f"/data/projects")
     # Apply sleep after the main REST call
     apply_sleep(args)
 
@@ -538,7 +538,7 @@ def execute_get_project_xml(connection: XNATSession, args: argparse.Namespace) -
             for row in csv_reader:
                 project_ids.append(row[0])  # Assuming the project ID is in the first column
     else:
-        all_projects = session.get_json(f"/data/projects")
+        all_projects = connection.get_json(f"/data/projects")
         # Apply sleep after the REST call (moved up here)
         result = all_projects['ResultSet']['Result']
 
@@ -547,7 +547,7 @@ def execute_get_project_xml(connection: XNATSession, args: argparse.Namespace) -
 
 
     for id in project_ids:
-        xml=session.get(f"/data/projects/{id}?format=xml")
+        xml=connection.get(f"/data/projects/{id}?format=xml")
         z = xml.content
         f=open(f"{args.output_folder}/{id}.xml", "w")
         f.write(xml.content.decode("utf-8"))
@@ -706,7 +706,6 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
     if args.project_xml:
         if args.output_folder:
             execute_get_project_xml(connection, args)
-            return
         else:
             print("[WARNING] No output folder provided.")
             return
@@ -743,14 +742,14 @@ def format_subject_header_rows() -> str:
 def format_subject_data(p) -> str:
     return f"{p.id}, {p.label}, {p.insert_date}, {len(p.experiments)} "
 
-def execute_subject_list(session: XNATSession, args: argparse.Namespace) -> None:
+def execute_subject_list(connection: XNATSession, args: argparse.Namespace) -> None:
 
     if (args.subjects):
         print("\nSubject List")
         print(format_subject_header_rows())
-        for proj in session.projects:
-            project_header = format_project_id_name(session.projects[proj])
-            for subject in session.projects[proj].subjects.values():
+        for proj in connection.projects:
+            project_header = format_project_id_name(connection.projects[proj])
+            for subject in connection.projects[proj].subjects.values():
                 print(f"{project_header}, {format_subject_data(subject)}")
                 x = ""
                 y = ""
@@ -760,14 +759,14 @@ def format_session_header_rows() -> str:
 def format_session_data(p) -> str:
     return f"{p.id}, {p.label}, {p.insert_date}, {p.modality}, {len(p.scans)} "
 
-def execute_session_list(session: XNATSession, args: argparse.Namespace) -> None:
+def execute_session_list(connection: XNATSession, args: argparse.Namespace) -> None:
 
     if (args.sessions):
         print ("\nSession List")
         print(format_session_header_rows())
-        for proj in session.projects:
-            po = session.projects[proj]
-            project_header = format_project_id_name(session.projects[proj])
+        for proj in connection.projects:
+            po = connection.projects[proj]
+            project_header = format_project_id_name(connection.projects[proj])
             for experiment in po.experiments.values():
                 print(f"{project_header} {format_session_data(experiment)}")
 
