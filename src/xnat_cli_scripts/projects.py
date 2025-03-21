@@ -237,7 +237,7 @@ def execute_list_scan_types(connection: XNATSession, args: argparse.Namespace) -
         print("[ERROR] --output_folder is required.")
         return
 
-    output_file = args.output_folder  # Treat as full file path
+    output_file = f"{args.output_folder}/scan_types.csv"
     Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
 
     project_ids = []
@@ -305,7 +305,7 @@ def execute_list_prearchive_code(connection: XNATSession, args: argparse.Namespa
         print("[ERROR] --output_folder is required.")
         return
 
-    output_file = args.output_folder  # This is the full path to the output file
+    output_file = f"{args.output_folder}/prearchive_codes.txt"  # or `.csv`
     Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
 
     project_ids = []

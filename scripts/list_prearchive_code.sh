@@ -34,5 +34,5 @@ set +e
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 # Run the prearchive code listing
-get_prearchive_codes "$BASE_FOLDER" "$BOILER_PLATE" "test_data/prearchive_codes.csv"
+get_prearchive_codes "$BASE_FOLDER" "$BOILER_PLATE" "test_data"
 

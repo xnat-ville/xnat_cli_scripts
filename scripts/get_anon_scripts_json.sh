@@ -34,4 +34,4 @@ set +e
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 # Run the anonymization script retrieval
-get_anon_scripts "$BASE_FOLDER" "$BOILER_PLATE" "test_data/anon_scripts"
+get_anon_scripts "$BASE_FOLDER" "$BOILER_PLATE" "test_data/anon_scripts_json"

@@ -34,4 +34,4 @@ set +e
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 # Run the anonymization status listing
-get_anon_status "$BASE_FOLDER" "$BOILER_PLATE" "test_data/anon_status.csv"
+get_anon_status "$BASE_FOLDER" "$BOILER_PLATE" "test_data"

@@ -34,4 +34,4 @@ set +e
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 # Run the scan types listing
-get_scan_types "$BASE_FOLDER" "$BOILER_PLATE" "test_data/scan_types.csv"
+get_scan_types "$BASE_FOLDER" "$BOILER_PLATE" "test_data"
