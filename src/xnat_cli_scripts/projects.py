@@ -18,7 +18,6 @@ import argparse
 import requests
 import csv
 import time
-import warnings
 import json
 from pathlib import Path
 from os import listdir
@@ -29,7 +28,6 @@ import xnat.mixin
 from xnat.session import XNATSession
 from xnat.exceptions import XNATResponseError
 import xnat_cli_scripts.cli_common
-warnings.filterwarnings('ignore')
 
 
 def apply_sleep(args: argparse.Namespace) -> None:
@@ -287,6 +285,60 @@ def execute_list_scan_types(connection: XNATSession, args: argparse.Namespace) -
     except Exception as e:
         print(f"Unexpected error writing to CSV file: {e}")
 
+def execute_list_prearchive_code(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Lists prearchive code for each project and writes to test_data/prearchive_codes.csv.
+    Output format: {project_id}\t{prearchive_code}
+    """
+    output_file = "test_data/prearchive_codes.csv"
+    project_ids = []
+
+    # Load project IDs from CSV if provided
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except FileNotFoundError:
+            print(f"[ERROR] CSV file not found: {args.csv_file}")
+            return
+        except Exception as e:
+            print(f"[ERROR] Error reading CSV file: {e}")
+            return
+
+    # If no CSV, fetch all project IDs
+    if not project_ids:
+        all_projects = connection.get_json("/data/projects")
+        if 'ResultSet' in all_projects and 'Result' in all_projects['ResultSet']:
+            project_ids = [proj['ID'] for proj in all_projects['ResultSet']['Result']]
+        else:
+            print("[ERROR] Failed to retrieve projects.")
+            return
+
+    # Collect results
+    results = []
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/prearchive_code")
+            apply_sleep(args)
+
+            if response.status_code == 200:
+                prearchive_code = response.text.strip()
+                results.append(f"{project_id}\t{prearchive_code}")
+            else:
+                results.append(f"{project_id}\tERROR\t{response.status_code}: {response.text}")
+        except requests.RequestException as e:
+            results.append(f"{project_id}\tERROR\tRequest failed: {e}")
+
+    # Write to file (assumes test_data/ already exists)
+    try:
+        with open(output_file, mode='w', encoding='utf-8', newline='') as f:
+            f.write("\n".join(results))
+        print("[INFO] Prearchive codes written successfully.")
+    except Exception as e:
+        print(f"[ERROR] Failed to write to output file: {e}")
+
 def execute_remove_groups(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Remove groups specified in the CSV file.
@@ -497,7 +549,10 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
 
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
-    if args.scan_types:
+    
+    if args.prearchive_code:
+        execute_list_prearchive_code(connection, args)
+    elif args.scan_types:
         execute_list_scan_types(connection, args)
     elif args.anon:
         execute_list_anon_status(connection, args)
@@ -797,12 +852,14 @@ if __name__ == "__main__":
     parser.add_argument(      '--project_xml',     dest='project_xml',              help='Extract/Operate on Project XML',             action='store_true')
     parser.add_argument(      '--anon',            dest='anon',                     help="List anonymization status for projects",     action='store_true')
     parser.add_argument(      '--scan_types',      dest='scan_types',               help='List scan types',                            action='store_true')
+    parser.add_argument(      '--prearchive_code', dest='prearchive_code',          help="List prearchive code for projects",          action='store_true')
+
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
     parser.add_argument('-s', '--sleep',           dest='sleep',                    help="Time to sleep after each REST call")
     parser.add_argument('-v', '--verbose',         dest='verbose',                  help="Verbose mode",                               action='store_true')
-    parser.add_argument('--csv',                   dest='csv_file',                 help='Path to CSV file operations such as listing, removing, or changing groups')
+    parser.add_argument(      '--csv',             dest='csv_file',                 help='Path to CSV file operations such as listing, removing, or changing groups')
     parser.add_argument(      '--input_folder',    dest='input_folder',             help='Path to input folder of files')
     parser.add_argument(      '--output_folder',   dest='output_folder',            help='Path to output folder')
 
@@ -816,6 +873,7 @@ if __name__ == "__main__":
 
     session = xnat.connect(args.url, user=auth_user, password=auth_password, extension_types=xnat_extensions)
 
+try:
     if args.list:
         execute_list_master(session, args)
     elif args.remove:
@@ -826,7 +884,8 @@ if __name__ == "__main__":
         execute_get_master(session, args)
     else:
         print("[ERROR] No valid action specified. Use -L, -R, --update, or --get.")
+finally:
+    session.disconnect()  # Ensures cleanup even if an error occurs
 
-    session.disconnect()
 
 
