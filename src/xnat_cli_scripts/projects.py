@@ -178,17 +178,17 @@ def execute_list_anon_status(connection: XNATSession, args: argparse.Namespace) 
     """
     Lists anonymization status for projects, printing a CSV output with:
       {project_id},{true/false} (if anonymization script exists).
-
-    If --csv is provided, only checks the listed projects.
     """
     if not args.output_folder:
         print("[ERROR] --output_folder is required.")
         return
 
     output_file = f"{args.output_folder}/anon_status.csv"
+    Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
+
     project_ids = []
 
-    # Check if CSV input is provided and load project IDs
+    # Load project IDs from CSV if provided
     if args.csv_file:
         try:
             with open(args.csv_file, mode='r') as file:
@@ -201,30 +201,39 @@ def execute_list_anon_status(connection: XNATSession, args: argparse.Namespace) 
             print(f"[ERROR] Exception while reading CSV: {e}")
             return
 
-    # If no CSV provided, get all projects
+    # If no CSV, get all projects
     if not project_ids:
         all_projects = connection.get_json("/data/projects")
         if 'ResultSet' in all_projects and 'Result' in all_projects['ResultSet']:
             project_ids = [proj['ID'] for proj in all_projects['ResultSet']['Result']]
+        else:
+            print("[ERROR] Failed to retrieve projects.")
+            return
 
-    # Check anonymization status for each project
-    anon_statuses = []
+    # Check anonymization status
+    results = []
+
     for project_id in project_ids:
         anon_url = f"/data/projects/{project_id}/config/anon"
         try:
             response = connection.get_json(anon_url)
-            has_anon_script = "true" if response and isinstance(response, dict) else "false"
-        except xnat.exceptions.XNATResponseError as e:
-            has_anon_script = "false" if hasattr(e, "status") and e.status == 404 else None
+            has_anon = "true" if response and isinstance(response, dict) else "false"
+        except xnat.exceptions.XNATResponseError:
+            has_anon = "false"
+        except Exception as e:
+            print(f"[ERROR] Unexpected error for {project_id}: {e}")
+            has_anon = "false"
 
-        if has_anon_script is not None:
-            anon_statuses.append(f"{project_id},{has_anon_script}")
+        results.append(f"{project_id},{has_anon}")
 
-    # Save results as CSV
-    with open(output_file, mode='w', newline='') as file:
-        file.write("\n".join(anon_statuses))
+    # Write to file
+    try:
+        with open(output_file, mode='w', encoding='utf-8', newline='') as f:
+            f.write("\n".join(results))
+        print(f"[INFO] Anonymization status listed successfully")
+    except Exception as e:
+        print(f"[ERROR] Failed to write output: {e}")
 
-    print("[INFO] Anonymization status check completed.")
 
 def execute_list_scan_types(connection: XNATSession, args: argparse.Namespace) -> None:
     """
