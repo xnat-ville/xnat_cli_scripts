@@ -20,6 +20,7 @@ import csv
 import time
 import json
 from pathlib import Path
+import os
 from os import listdir
 from os.path import isfile
 #import xnat
@@ -42,7 +43,7 @@ def apply_sleep(args: argparse.Namespace) -> None:
 
 
 def format_project_header_rows() -> str:
-    return "ID\tName\tInsert Date\tSubject Count\tExperiment Count\PI"
+    return "ID\tName\tInsert Date\tSubject Count\tExperiment Count\tPI"
 def format_project_data(project_json, project_object, args: argparse.Namespace) -> str:
     formatted_string=""
     if (args.brief_format is True):
@@ -194,8 +195,10 @@ def execute_list_anon_status(connection: XNATSession, args: argparse.Namespace) 
                 csv_reader = csv.reader(file, delimiter='\t')
                 project_ids = [row[0].strip() for row in csv_reader if row]
         except FileNotFoundError:
+            print(f"[ERROR] CSV file not found: {args.csv_file}")
             return
-        except Exception:
+        except Exception as e:
+            print(f"[ERROR] Exception while reading CSV: {e}")
             return
 
     # If no CSV provided, get all projects
@@ -230,7 +233,12 @@ def execute_list_scan_types(connection: XNATSession, args: argparse.Namespace) -
 
     If --csv_file is provided, only checks the listed projects.
     """
-    output_file = "test_data/scan_types.csv"  # Directly using test_data since it always exists
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
+
+    output_file = args.output_folder  # Treat as full file path
+    Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
 
     project_ids = []
 
@@ -275,26 +283,31 @@ def execute_list_scan_types(connection: XNATSession, args: argparse.Namespace) -
                         item['type'] for item in scan_types_response.get('ResultSet', {}).get('Result', [])
                     ]
 
-                    # Write each scan type on a new line
                     for scan_type in scan_types:
                         csv_writer.writerow([project_id, scan_type])
 
                 except RequestException as e:
                     print(f"Error fetching scan types for project '{project_id}': {e}")
 
-        print(f"Scan types successfully written to {output_file}")
+        print(f"Scan types successfully written to output folder.")
 
     except PermissionError:
-        print(f"Error: Unable to write to {output_file}. Close the file if it's open and try again.")
+        print(f"Error: Unable to write Scan types. Close the file if it's open and try again.")
     except Exception as e:
         print(f"Unexpected error writing to CSV file: {e}")
 
 def execute_list_prearchive_code(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Lists prearchive code for each project and writes to test_data/prearchive_codes.csv.
+    Lists prearchive code for each project and writes to the specified output file.
     Output format: {project_id}\t{prearchive_code}
     """
-    output_file = "test_data/prearchive_codes.csv"
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
+
+    output_file = args.output_folder  # This is the full path to the output file
+    Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
+
     project_ids = []
 
     # Load project IDs from CSV if provided
@@ -335,7 +348,7 @@ def execute_list_prearchive_code(connection: XNATSession, args: argparse.Namespa
         except requests.RequestException as e:
             results.append(f"{project_id}\tERROR\tRequest failed: {e}")
 
-    # Write to file (assumes test_data/ already exists)
+    # Write to file
     try:
         with open(output_file, mode='w', encoding='utf-8', newline='') as f:
             f.write("\n".join(results))
@@ -616,8 +629,12 @@ def execute_get_series_import_filter_json(connection: XNATSession, args: argpars
     """
     Retrieves the Series Import Filter for each project and saves it as a JSON file.
     """
-    output_folder = args.output_folder if args.output_folder else "test_data/series_import_filters"
-    Path(output_folder).mkdir(parents=True, exist_ok=True)
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+    output_folder = args.output_folder
 
     project_ids = []
     if args.csv_file:
@@ -627,28 +644,20 @@ def execute_get_series_import_filter_json(connection: XNATSession, args: argpars
         all_projects = connection.get_json("/data/projects")
         project_ids = [p['ID'] for p in all_projects['ResultSet']['Result']]
 
-    found_count = 0
-    missing_count = 0
-
     for project_id in project_ids:
         sif_url = f"/data/projects/{project_id}/config/seriesImportFilter"
 
         try:
             response = connection.get_json(sif_url)
             if response:
-                with open(f"{output_folder}/{project_id}.seriesImportFilter.json", "w", encoding="utf-8") as f:
+                file_path = f"{output_folder}/{project_id}.seriesImportFilter.json"
+                with open(file_path, "w", encoding="utf-8") as f:
                     json.dump(response, f, indent=4)
-                found_count += 1
-            else:
-                missing_count += 1
-
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
-                missing_count += 1
+                continue
 
-    # Final summary message
-    print(f"[INFO] Successfully saved {found_count} Series Import Filters.")
-    print(f"[INFO] {missing_count} projects did not have a Series Import Filter.")
+    print("[INFO] Successfully saved Series Import Filters.")
 
 def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -704,17 +713,19 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
 
     print("[INFO] Anonymization scripts retrieval completed.")
 
-
-
 def execute_get_scan_types_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves scan types from XNAT projects and saves them as separate JSON files.
-    Each project's scan types are saved in `test_data/scan_types/{project_id}.json`.
+    Each project's scan types are saved in the provided output folder.
 
     If --csv_file is provided, only checks the listed projects.
     """
-    output_folder = "test_data/scan_types"
-    Path(output_folder).mkdir(parents=True, exist_ok=True)  # Ensure folder exists
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+    output_folder = args.output_folder
 
     project_ids = []
 
@@ -748,15 +759,12 @@ def execute_get_scan_types_json(connection: XNATSession, args: argparse.Namespac
         try:
             response = connection.get_json(scan_url)
 
-            # Ensure response contains scan types
             if response and 'ResultSet' in response and 'Result' in response['ResultSet']:
                 scan_types = [item['type'] for item in response['ResultSet']['Result']]
-                
-                # Skip saving if no scan types exist
                 if not scan_types:
-                    continue  
+                    continue
 
-                file_path = f"{output_folder}/{project_id}.json"
+                file_path = os.path.join(output_folder, f"{project_id}.json")
                 with open(file_path, "w", encoding="utf-8") as f:
                     json.dump({"project_id": project_id, "scan_types": scan_types}, f, indent=4)
 

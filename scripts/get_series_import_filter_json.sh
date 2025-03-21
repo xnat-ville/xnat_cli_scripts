@@ -8,8 +8,8 @@
 get_series_import_filters() {
     export PYTHONPATH="$1/../src"
 
-    echo python3 -m xnat_cli_scripts.projects $2 --get --seriesImportFilter --output_folder test_data/series_import_filters
-         python3 -m xnat_cli_scripts.projects $2 --get --seriesImportFilter --output_folder test_data/series_import_filters
+    echo python3 -m xnat_cli_scripts.projects $2 --get --seriesImportFilter --output_folder $3
+         python3 -m xnat_cli_scripts.projects $2 --get --seriesImportFilter --output_folder $3
 }
 
 # Main starts here
@@ -33,5 +33,4 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-# Now, Series Import Filters will always go into 'test_data/series_import_filters'
-get_series_import_filters "$BASE_FOLDER" "$BOILER_PLATE"
+get_series_import_filters "$BASE_FOLDER" "$BOILER_PLATE" "test_data/series_import_filters"
