@@ -180,7 +180,11 @@ def execute_list_anon_status(connection: XNATSession, args: argparse.Namespace) 
 
     If --csv is provided, only checks the listed projects.
     """
-    output_file = "test_data/anon_status.csv"
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
+
+    output_file = f"{args.output_folder}/anon_status.csv"
     project_ids = []
 
     # Check if CSV input is provided and load project IDs
@@ -652,9 +656,12 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
     Only saves scripts for projects that have one enabled.
     If --csv is provided, only checks the listed projects.
     """
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
 
-    output_folder = args.output_folder if args.output_folder else "test_data/anon_scripts"
-    Path(output_folder).mkdir(parents=True, exist_ok=True)
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+    output_folder = args.output_folder
 
     project_ids = []
 
@@ -696,6 +703,7 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
                 print(f"[ERROR] Unexpected error for {project_id}: {e}")
 
     print("[INFO] Anonymization scripts retrieval completed.")
+
 
 
 def execute_get_scan_types_json(connection: XNATSession, args: argparse.Namespace) -> None:

@@ -8,8 +8,8 @@
 get_anon_scripts() {
     export PYTHONPATH="$1/../src"
 
-    echo "Executing: python3 -m xnat_cli_scripts.projects $2 --get --anon --output_folder test_data/anon_scripts"
-    python3 -m xnat_cli_scripts.projects $2 --get --anon --output_folder test_data/anon_scripts
+    echo "Executing: python3 -m xnat_cli_scripts.projects $2 --get --anon $3"
+    python3 -m xnat_cli_scripts.projects $2 --get --anon --output_folder $3
 }
 
 # Main starts here
@@ -34,4 +34,4 @@ set +e
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 # Run the anonymization script retrieval
-get_anon_scripts "$BASE_FOLDER" "$BOILER_PLATE"
+get_anon_scripts "$BASE_FOLDER" "$BOILER_PLATE" "test_data/anon_scripts"
