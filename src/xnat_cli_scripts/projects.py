@@ -305,7 +305,7 @@ def execute_list_prearchive_code(connection: XNATSession, args: argparse.Namespa
         print("[ERROR] --output_folder is required.")
         return
 
-    output_file = f"{args.output_folder}/prearchive_codes.txt"  # or `.csv`
+    output_file = f"{args.output_folder}/prearchive_codes.csv" 
     Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
 
     project_ids = []
