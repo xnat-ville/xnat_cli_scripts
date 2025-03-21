@@ -8,8 +8,8 @@
 get_investigator_json_files() {
     export PYTHONPATH="$1/../src"
 
-    echo python3 -m xnat_cli_scripts.investigators $2 --get --investigator_json --output_folder test_data/investigator_json
-         python3 -m xnat_cli_scripts.investigators $2 --get --investigator_json --output_folder test_data/investigator_json
+    echo python3 -m xnat_cli_scripts.investigators $2 --get --investigator_json --output_folder $3 
+         python3 -m xnat_cli_scripts.investigators $2 --get --investigator_json --output_folder $3
 }
 
 # Main starts here
@@ -34,4 +34,4 @@ set +e
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 # Now, investigator JSON data will always go into 'test_data/investigator_json'
-get_investigator_json_files "$BASE_FOLDER" "$BOILER_PLATE"
+get_investigator_json_files "$BASE_FOLDER" "$BOILER_PLATE" "test_data/investigator_json"

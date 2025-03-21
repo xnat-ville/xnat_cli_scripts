@@ -36,31 +36,34 @@ def apply_sleep(args: argparse.Namespace) -> None:
             print("[ERROR] Invalid sleep value. Please provide a valid number.")
 
 def execute_get_investigator_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
-    
-    #Retrieves investigator data from XNAT and saves each investigator as an individual JSON file.
-    
-    output_folder = args.output_folder if args.output_folder else "test_data/investigator_json"
-    Path(output_folder).mkdir(parents=True, exist_ok=True)
+    """
+    Retrieves investigator data from XNAT and saves each investigator as an individual JSON file.
+    Requires --output_folder to be specified.
+    """
+
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
     # Fetch investigator data from the API
     response = connection.get_json("/xapi/investigators")
     apply_sleep(args)
 
     for investigator in response:
-        investigator_id = investigator.get('xnatInvestigatordataId')  
+        investigator_id = investigator.get('xnatInvestigatordataId')
 
-        if not investigator_id:  # Skip if no ID found
-            print(f"[WARNING] Investigator missing ID, skipping.")
+        if not investigator_id:
+            print("[WARNING] Investigator missing ID, skipping.")
             continue
 
-        # Save JSON with only the ID as filename
-        file_name = f"{output_folder}/{investigator_id}.json"
-        with open(file_name, "w", encoding="utf-8") as f:
+        # Save each investigator JSON using their ID as the filename
+        file_path = f"{args.output_folder}/{investigator_id}.json"
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(investigator, f, indent=4)
 
-    print(f"Successfully saved investigator JSON files")
-
-
+    print("[INFO] Successfully saved investigator JSON files.")
 
 def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     if args.get and args.investigator_json:
