@@ -33,5 +33,7 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-get_series_import_filters "$BASE_FOLDER" "$BOILER_PLATE" "test_data/series_import_filter_json"
+rm -rf test_data/series_import_filter_json
+
+get_series_import_filters "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/series_import_filter_json"
 
