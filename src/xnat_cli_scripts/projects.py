@@ -221,17 +221,10 @@ def execute_list_anon_status(connection: XNATSession, args: argparse.Namespace) 
 
 def execute_list_scan_types(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Lists scan types for projects, printing a CSV output where:
-      project_id, scan_type
-
+    Lists scan types for projects.
+    Output: project_id,scan_type — printed to stdout.
     If --csv_file is provided, only checks the listed projects.
     """
-    if not args.output_folder:
-        print("[ERROR] --output_folder is required.")
-        return
-
-    output_file = f"{args.output_folder}/scan_types.csv"
-    Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
 
     project_ids = []
 
@@ -242,10 +235,10 @@ def execute_list_scan_types(connection: XNATSession, args: argparse.Namespace) -
                 csv_reader = csv.reader(file, delimiter='\t')
                 project_ids = [row[0].strip() for row in csv_reader if row]
         except FileNotFoundError:
-            print(f"Error: CSV file '{args.csv_file}' not found.")
+            print(f"[ERROR] CSV file '{args.csv_file}' not found.")
             return
         except Exception as e:
-            print(f"Error reading CSV file: {e}")
+            print(f"[ERROR] Failed to read CSV file: {e}")
             return
 
     # If no CSV provided, get all project IDs from XNAT
@@ -256,38 +249,26 @@ def execute_list_scan_types(connection: XNATSession, args: argparse.Namespace) -
                 proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])
             ]
         except RequestException as e:
-            print(f"Error fetching projects: {e}")
+            print(f"[ERROR] Failed to fetch projects: {e}")
             return
 
     if not project_ids:
-        print("No projects found.")
+        print("[INFO] No projects found.")
         return
 
-    # Write scan types to CSV (one row per scan type)
-    try:
-        with open(output_file, mode='w', newline='') as file:
-            csv_writer = csv.writer(file)
-            csv_writer.writerow(["project_id", "scan_type"])  # Header
+    # Print scan types (stdout)
+    for project_id in project_ids:
+        try:
+            scan_types_response = connection.get_json(f"/data/projects/{project_id}/scan_types")
+            scan_types = [
+                item['type'] for item in scan_types_response.get('ResultSet', {}).get('Result', [])
+            ]
 
-            for project_id in project_ids:
-                try:
-                    scan_types_response = connection.get_json(f"/data/projects/{project_id}/scan_types")
-                    scan_types = [
-                        item['type'] for item in scan_types_response.get('ResultSet', {}).get('Result', [])
-                    ]
+            for scan_type in scan_types:
+                print(f"{project_id},{scan_type}")
 
-                    for scan_type in scan_types:
-                        csv_writer.writerow([project_id, scan_type])
-
-                except RequestException as e:
-                    print(f"Error fetching scan types for project '{project_id}': {e}")
-
-        print(f"Scan types successfully written to output folder.")
-
-    except PermissionError:
-        print(f"Error: Unable to write Scan types. Close the file if it's open and try again.")
-    except Exception as e:
-        print(f"Unexpected error writing to CSV file: {e}")
+        except RequestException as e:
+            print(f"[ERROR] Failed to fetch scan types for project '{project_id}': {e}")
 
 def execute_list_prearchive_code(connection: XNATSession, args: argparse.Namespace) -> None:
     """
