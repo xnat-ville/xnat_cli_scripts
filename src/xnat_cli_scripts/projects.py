@@ -557,21 +557,22 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
     Update/upload project XML by reading XML for individual files in an input folder.
     """
 
-    if args.input_folder:
-        try:
-            http_headers = {}
-            http_headers['Content-Type: '] = 'application/xml'
-            listing = listdir(args.input_folder)
-            for f in listing:
-                project_xml = xnat_cli_scripts.cli_common.read_text_file(f"{args.input_folder}/{f}")
-                ab=project_xml
-                tmp_string = str(Path(f).with_suffix(''))
-                xnat_path=f"/data/archive/projects/{tmp_string}"
-                # Do not have the right syntax yet
-#                response = connection.put(xnat_path, data=project_xml, format="inbody=true" )
+    if args.input_folder is None:
+        raise Exception("projects --update --project_xml requires --input_folder")
 
-        except Exception as e:
-            print(f"[ERROR] Exception while reading through folder: {args.input_folder}")
+    try:
+        http_headers = {}
+        http_headers['Content-Type'] = 'application/xml'
+        listing = listdir(args.input_folder)
+        for f in listing:
+            with open(f"{args.input_folder}/{f}") as xml_file:
+                project_id = str(Path(f).with_suffix(''))
+                put_path=f"/data/archive/projects/{project_id}"
+                connection.put(put_path, data=xml_file, headers=http_headers)
+                xml_file.close()
+
+    except Exception as e:
+        print(f"[ERROR] Exception while reading through folder: {args.input_folder}\n{e}")
 
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
