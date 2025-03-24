@@ -657,19 +657,34 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
     for project_id in project_ids:
         anon_url = f"/data/projects/{project_id}/config/anon"
         try:
-            response = connection.get_json(anon_url)
+            response = connection.get(anon_url)
 
-            # Ensure response is valid and contains the anonymization script
-            if response:
+            if response.status_code == 404:
+                continue  # Silently skip
+
+            response.raise_for_status()  # Raise only for other unexpected errors
+
+            script = response.json()
+            if script:
                 file_path = f"{output_folder}/{project_id}.anon.json"
                 with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(response, f, indent=4)
+                    json.dump(script, f, indent=4)
 
-        except xnat.exceptions.XNATResponseError as e:
-            if hasattr(e, 'response') and e.response is not None and e.response.status_code == 404:
-                continue  # Skip projects without an anonymization script
-            else:
-                print(f"[ERROR] Unexpected error for {project_id}: {e}")
+        except requests.exceptions.HTTPError as e:
+            if response.status_code != 404:
+                print(f"[ERROR] Unexpected HTTP error for {project_id}: {e}")
+        except Exception as e:
+            print(f"[ERROR] General failure for {project_id}: {e}")
+
+    print("[INFO] Anonymization scripts retrieval completed.")
+
+
+except xnat.exceptions.XNATResponseError as e:
+    if hasattr(e, 'response') and e.response is not None and e.response.status_code == 404:
+        continue  # Silently skip if the anon script is not found
+    else:
+        print(f"[ERROR] Unexpected error for {project_id}: {e}")
+
 
     print("[INFO] Anonymization scripts retrieval completed.")
 
