@@ -272,15 +272,10 @@ def execute_list_scan_types(connection: XNATSession, args: argparse.Namespace) -
 
 def execute_list_prearchive_code(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Lists prearchive code for each project and writes to the specified output file.
+    Lists prearchive code for each project.
     Output format: {project_id}\t{prearchive_code}
+    Printed to stdout. Shell script should redirect output.
     """
-    if not args.output_folder:
-        print("[ERROR] --output_folder is required.")
-        return
-
-    output_file = f"{args.output_folder}/prearchive_codes.csv" 
-    Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
 
     project_ids = []
 
@@ -306,9 +301,6 @@ def execute_list_prearchive_code(connection: XNATSession, args: argparse.Namespa
             print("[ERROR] Failed to retrieve projects.")
             return
 
-    # Collect results
-    results = []
-
     for project_id in project_ids:
         try:
             response = connection.get(f"/data/projects/{project_id}/prearchive_code")
@@ -316,19 +308,12 @@ def execute_list_prearchive_code(connection: XNATSession, args: argparse.Namespa
 
             if response.status_code == 200:
                 prearchive_code = response.text.strip()
-                results.append(f"{project_id}\t{prearchive_code}")
+                print(f"{project_id}\t{prearchive_code}")
             else:
-                results.append(f"{project_id}\tERROR\t{response.status_code}: {response.text}")
+                print(f"{project_id}\tERROR\t{response.status_code}: {response.text}")
         except requests.RequestException as e:
-            results.append(f"{project_id}\tERROR\tRequest failed: {e}")
+            print(f"{project_id}\tERROR\tRequest failed: {e}")
 
-    # Write to file
-    try:
-        with open(output_file, mode='w', encoding='utf-8', newline='') as f:
-            f.write("\n".join(results))
-        print("[INFO] Prearchive codes written successfully.")
-    except Exception as e:
-        print(f"[ERROR] Failed to write to output file: {e}")
 
 def execute_remove_groups(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -670,7 +655,7 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
 
     # Check anonymization script for each project
     for project_id in project_ids:
-        anon_url = f"/data/projects/{project_id}/config/anon"  
+        anon_url = f"/data/projects/{project_id}/config/anon"
         try:
             response = connection.get_json(anon_url)
 
@@ -681,12 +666,13 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
                     json.dump(response, f, indent=4)
 
         except xnat.exceptions.XNATResponseError as e:
-            if e.status_code == 404:
+            if hasattr(e, 'response') and e.response is not None and e.response.status_code == 404:
                 continue  # Skip projects without an anonymization script
             else:
                 print(f"[ERROR] Unexpected error for {project_id}: {e}")
 
     print("[INFO] Anonymization scripts retrieval completed.")
+
 
 def execute_get_scan_types_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
