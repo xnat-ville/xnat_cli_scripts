@@ -630,61 +630,35 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
         return
 
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
-    output_folder = args.output_folder
 
+    # Get project IDs
     project_ids = []
-
-    # Check if CSV input is provided and load project IDs
     if args.csv_file:
         try:
             with open(args.csv_file, mode='r') as file:
                 csv_reader = csv.reader(file, delimiter='\t')
                 project_ids = [row[0].strip() for row in csv_reader if row]
-        except FileNotFoundError:
-            print(f"[ERROR] CSV file not found: {args.csv_file}")
-            return
         except Exception as e:
-            print(f"[ERROR] Exception while reading CSV: {e}")
+            print(f"[ERROR] Failed to read CSV file: {e}")
             return
-
-    # If no CSV provided, get all projects
-    if not project_ids:
+    else:
         all_projects = connection.get_json("/data/projects")
-        if 'ResultSet' in all_projects and 'Result' in all_projects['ResultSet']:
-            project_ids = [proj['ID'] for proj in all_projects['ResultSet']['Result']]
+        project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
 
-    # Check anonymization script for each project
+    # Fetch and save anonymization scripts
     for project_id in project_ids:
-        anon_url = f"/data/projects/{project_id}/config/anon"
         try:
-            response = connection.get(anon_url)
-
+            response = connection.get(f"/data/projects/{project_id}/config/anon")
             if response.status_code == 404:
-                continue  # Silently skip
-
-            response.raise_for_status()  # Raise only for other unexpected errors
+                continue  # silently skip projects with no script
 
             script = response.json()
             if script:
-                file_path = f"{output_folder}/{project_id}.anon.json"
+                file_path = f"{args.output_folder}/{project_id}.anon.json"
                 with open(file_path, "w", encoding="utf-8") as f:
                     json.dump(script, f, indent=4)
-
-        except requests.exceptions.HTTPError as e:
-            if response.status_code != 404:
-                print(f"[ERROR] Unexpected HTTP error for {project_id}: {e}")
-        except Exception as e:
-            print(f"[ERROR] General failure for {project_id}: {e}")
-
-    print("[INFO] Anonymization scripts retrieval completed.")
-
-
-except xnat.exceptions.XNATResponseError as e:
-    if hasattr(e, 'response') and e.response is not None and e.response.status_code == 404:
-        continue  # Silently skip if the anon script is not found
-    else:
-        print(f"[ERROR] Unexpected error for {project_id}: {e}")
-
+        except Exception:
+            continue  # quietly skip any project that errors out
 
     print("[INFO] Anonymization scripts retrieval completed.")
 
