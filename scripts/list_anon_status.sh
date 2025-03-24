@@ -3,13 +3,13 @@
 # Arguments:
 #              Base Folder
 #              Boiler Plate
-#              Output Folder 
+#              Output File Path
 
 get_anon_status() {
     export PYTHONPATH="$1/../src"
 
-    echo "Executing: python3 -m xnat_cli_scripts.projects $2 --list --anon --output_folder $3"
-    python3 -m xnat_cli_scripts.projects $2 --list --anon --output_folder $3
+    echo "Executing: python3 -m xnat_cli_scripts.projects $2 --list --anon > $3"
+          python3 -m xnat_cli_scripts.projects $2 --list --anon > "$3"
 }
 
 # Main starts here
@@ -25,13 +25,14 @@ fi
 auth_string="$1"
 system="$2"
 
-BASE_FOLDER=`dirname $0`
+BASE_FOLDER=$(dirname "$0")
 source "$BASE_FOLDER/common.sh"
 set -e
-url=$(get_xnat_url ${system})
+url=$(get_xnat_url "${system}")
 set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-# Run the anonymization status listing
-get_anon_status "$BASE_FOLDER" "$BOILER_PLATE" "test_data"
+# Run the anonymization status listing and redirect to the correct file
+get_anon_status "$BASE_FOLDER" "$BOILER_PLATE" "test_data/anon_status.csv"
+

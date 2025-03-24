@@ -176,15 +176,10 @@ def execute_list_project_groups(connection: XNATSession, args: argparse.Namespac
         
 def execute_list_anon_status(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Lists anonymization status for projects, printing a CSV output with:
-      {project_id},{true/false} (if anonymization script exists).
+    Lists anonymization status for projects.
+    Prints: project_id,true|false if an anonymization script exists.
+    Output is printed to stdout (no file writing).
     """
-    if not args.output_folder:
-        print("[ERROR] --output_folder is required.")
-        return
-
-    output_file = f"{args.output_folder}/anon_status.csv"
-    Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
 
     project_ids = []
 
@@ -210,9 +205,6 @@ def execute_list_anon_status(connection: XNATSession, args: argparse.Namespace) 
             print("[ERROR] Failed to retrieve projects.")
             return
 
-    # Check anonymization status
-    results = []
-
     for project_id in project_ids:
         anon_url = f"/data/projects/{project_id}/config/anon"
         try:
@@ -224,15 +216,7 @@ def execute_list_anon_status(connection: XNATSession, args: argparse.Namespace) 
             print(f"[ERROR] Unexpected error for {project_id}: {e}")
             has_anon = "false"
 
-        results.append(f"{project_id},{has_anon}")
-
-    # Write to file
-    try:
-        with open(output_file, mode='w', encoding='utf-8', newline='') as f:
-            f.write("\n".join(results))
-        print(f"[INFO] Anonymization status listed successfully")
-    except Exception as e:
-        print(f"[ERROR] Failed to write output: {e}")
+        print(f"{project_id},{has_anon}")
 
 
 def execute_list_scan_types(connection: XNATSession, args: argparse.Namespace) -> None:
