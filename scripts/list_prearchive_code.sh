@@ -8,8 +8,8 @@
 get_prearchive_codes() {
     export PYTHONPATH="$1/../src"
 
-    echo "Executing: python3 -m xnat_cli_scripts.projects $2 --list --prearchive_code --output_folder $3"
-    python3 -m xnat_cli_scripts.projects $2 --list --prearchive_code --output_folder "$3"
+    echo "python3 -m xnat_cli_scripts.projects $2 --list --prearchive_code > $3"
+          python3 -m xnat_cli_scripts.projects $2 --list --prearchive_code > $3
 }
 
 # Main starts here
@@ -34,5 +34,5 @@ set +e
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 # Run the prearchive code listing
-get_prearchive_codes "$BASE_FOLDER" "$BOILER_PLATE" "test_data"
+get_prearchive_codes "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" test_data/prearchive_codes.txt
 
