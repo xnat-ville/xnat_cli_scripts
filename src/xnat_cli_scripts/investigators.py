@@ -15,6 +15,7 @@ import warnings
 from pathlib import Path
 from os import listdir
 import json
+import csv
 import requests
 import xnat
 import xnat.core
@@ -34,6 +35,51 @@ def apply_sleep(args: argparse.Namespace) -> None:
                 time.sleep(sleep_time)
         except ValueError:
             print("[ERROR] Invalid sleep value. Please provide a valid number.")
+
+def execute_list_investigators(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+    """
+    Handles listing of investigators from the XNAT system.
+
+    If --csv is provided, limits the output to investigator IDs listed in the CSV file.
+    Outputs a tab-delimited list with the following fields:
+    xnatInvestigatordataId, lastname, firstname, email, institution
+    """
+
+    # Optional filtering
+    filter_ids = set()
+    if args.csv:
+        try:
+            with open(args.csv, newline='') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    for cell in row:
+                        cell = cell.strip()
+                        if cell.isdigit():
+                            filter_ids.add(int(cell))
+        except Exception as e:
+            print(f"[ERROR] Could not read CSV filter file: {e}")
+            return
+
+    try:
+        response = connection.get_json("/xapi/investigators")
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch investigators: {e}")
+        return
+
+    apply_sleep(args)
+
+    for inv in response:
+        inv_id = inv.get("xnatInvestigatordataId")
+        if not inv_id:
+            continue
+        if filter_ids and inv_id not in filter_ids:
+            continue
+
+        print(f"{inv_id}\t{inv.get('lastname','')}\t{inv.get('firstname','')}\t{inv.get('email','')}\t{inv.get('institution','')}")
+
+
+def execute_list_master(connection:xnat.session.XNATSession, args: argparse.Namespace) -> None:
+    execute_list_investigators(connection, args)   
 
 def execute_get_investigator_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     """
@@ -66,7 +112,7 @@ def execute_get_investigator_json(connection: xnat.session.XNATSession, args: ar
     print("[INFO] Successfully saved investigator JSON files.")
 
 def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
-    if args.get and args.investigator_json:
+    if args.investigator_json:
         execute_get_investigator_json(connection, args)
     else:
         print("[WARNING] No valid GET action specified. Use --get --investigator_json.")
@@ -96,7 +142,7 @@ def execute_update_investigator_json(connection: xnat.session.XNATSession, args:
     print(f"Successfully updated investigator JSON files")
 
 def execute_update_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
-    if args.update and args.investigator_json:
+    if args.investigator_json:
         execute_update_investigator_json(connection, args)
     else:
         print("[WARNING] No valid update action specified. Use --update --investigator_json.")
@@ -110,8 +156,9 @@ if __name__ == "__main__":
     parser.add_argument('-e', '--extension_types',   dest='extension_types',    help="True or False for extension_types in xnat.connect")
 
     ## These are operations
-    parser.add_argument(      '--get',               dest='get',                help="Action is GET investigator JSON", action='store_true')
-    parser.add_argument(      '--update',            dest='update',             help='Action is UPDATE (PUT',           action='store_true')
+    parser.add_argument(      '--list',              dest='list',               help="Action is LIST",                   action='store_true')
+    parser.add_argument(      '--get',               dest='get',                help="Action is GET",                    action='store_true')
+    parser.add_argument(      '--update',            dest='update',             help='Action is UPDATE (PUT)',           action='store_true')
 
     # These are objects of the operations
     parser.add_argument(      '--investigator_json', dest='investigator_json',  help="Extract investigator JSON",       action='store_true')
@@ -129,7 +176,9 @@ if __name__ == "__main__":
 
     session = xnat.connect(args.url, user=auth_user, password=auth_password, extension_types=xnat_extensions)
 
-    if args.get:
+    if args.list:
+        execute_list_master(session, args)
+    elif args.get:
         execute_get_master(session, args)
     elif args.update:
         execute_update_master(session, args)
