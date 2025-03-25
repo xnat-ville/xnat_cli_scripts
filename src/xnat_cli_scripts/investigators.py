@@ -36,9 +36,9 @@ def apply_sleep(args: argparse.Namespace) -> None:
         except ValueError:
             print("[ERROR] Invalid sleep value. Please provide a valid number.")
 
-def execute_list_investigators(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_list_investigator(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     """
-    Handles listing of investigators from the XNAT system.
+    Handles listing of all investigators from the XNAT system.
 
     If --csv is provided, limits the output to investigator IDs listed in the CSV file.
     Outputs a tab-delimited list with the following fields:
@@ -77,7 +77,7 @@ def execute_list_investigators(connection: xnat.session.XNATSession, args: argpa
 
         print(f"{inv_id}\t{inv.get('lastname','')}\t{inv.get('firstname','')}\t{inv.get('email','')}\t{inv.get('institution','')}")
 
-def execute_list_investigator_pis(connection: XNATSession, args: argparse.Namespace) -> None:
+def execute_list_investigator_pi(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Lists investigators who are primary PIs for projects.
     Output: investigator_id<TAB>project_id (one line per project).
@@ -118,11 +118,52 @@ def execute_list_investigator_pis(connection: XNATSession, args: argparse.Namesp
         for project_id in primary_projects:
             print(f"{inv_id}\t{project_id}")
 
+def execute_list_investigator_non_pi(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Lists investigators who are in the investigatorProjects list (non-primary).
+    Output: investigator_id<TAB>project_id
+    Optional CSV filter limits by investigator ID.
+    """
+    filter_ids = set()
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as f:
+                reader = csv.reader(f, delimiter='\t')
+                for row in reader:
+                    for cell in row:
+                        cell = cell.strip()
+                        if cell.isdigit():
+                            filter_ids.add(int(cell))
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV filter: {e}")
+            return
+
+    try:
+        response = connection.get_json("/xapi/investigators")
+    except Exception as e:
+        print(f"[ERROR] Failed to retrieve investigator data: {e}")
+        return
+
+    apply_sleep(args)
+
+    for inv in response:
+        inv_id = inv.get("xnatInvestigatordataId")
+        if not inv_id:
+            continue
+        if filter_ids and inv_id not in filter_ids:
+            continue
+
+        investigator_projects = inv.get("investigatorProjects", [])
+        for project_id in investigator_projects:
+            print(f"{inv_id}\t{project_id}")
+
 def execute_list_master(connection:xnat.session.XNATSession, args: argparse.Namespace) -> None:
-    if args.pi:
-        execute_list_investigator_pis(connection,args)
+    if args.investigator_non_pi:
+        execute_list_investigator_non_pi(connection,args)
+    elif args.pi:
+        execute_list_investigator_pi(connection,args)
     else:
-        execute_list_investigators(connection,args)   
+        execute_list_investigator(connection,args)   
 
 def execute_get_investigator_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     """
@@ -204,8 +245,9 @@ if __name__ == "__main__":
     parser.add_argument(      '--update',            dest='update',             help='Action is UPDATE (PUT)',           action='store_true')
 
     # These are objects of the operations
+    parser.add_argument(      '--investigator',      dest='investigator_non_pi',       help="List non-primary investigator project links",      action='store_true')
     parser.add_argument(      '--investigator_json', dest='investigator_json',  help="Extract investigator JSON",       action='store_true')
-    parser.add_argument(      '--pi',                dest='pi',                 help="Used for PI_ID and project_ID",   action='store_true')
+    parser.add_argument(      '--pi',                dest='investigator_pi',                 help="List primary investigator project links",   action='store_true')
     parser.add_argument(      '--output_folder',     dest='output_folder',      help="Folder to store investigator JSON files")
     parser.add_argument(      '--input_folder',      dest='input_folder',       help="Folder with input JSON files")
 

@@ -8,8 +8,8 @@
 list_investigators_investigator() {
     export PYTHONPATH="$1/../src"
 
-    echo python3 -m xnat_cli_scripts.investigators $2 --list --investigator $3
-         python3 -m xnat_cli_scripts.investigators $2 --list --investigator $3
+    echo "python3 -m xnat_cli_scripts.investigators $2 --list --investigator > $3"
+          python3 -m xnat_cli_scripts.investigators $2 --list --investigator > $3
 }
 
 # Main starts here
