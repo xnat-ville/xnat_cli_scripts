@@ -675,53 +675,42 @@ def execute_get_scan_types_json(connection: XNATSession, args: argparse.Namespac
         return
 
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
-    output_folder = args.output_folder
 
+    # Load project IDs
     project_ids = []
-
-    # Load project IDs from CSV if provided
     if args.csv_file:
         try:
             with open(args.csv_file, mode='r') as file:
-                csv_reader = csv.reader(file, delimiter='\t')
-                project_ids = [row[0].strip() for row in csv_reader if row]
-        except FileNotFoundError:
-            print(f"[ERROR] CSV file not found: {args.csv_file}")
-            return
+                reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in reader if row]
         except Exception as e:
-            print(f"[ERROR] Exception while reading CSV: {e}")
+            print(f"[ERROR] Could not read CSV file: {e}")
             return
-
-    # If no CSV provided, get all projects
-    if not project_ids:
+    else:
         try:
             all_projects = connection.get_json("/data/projects")
-            project_ids = [
-                proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])
-            ]
-        except RequestException as e:
-            print(f"[ERROR] Failed to fetch projects: {e}")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Could not retrieve project list: {e}")
             return
 
-    # Retrieve scan types for each project
+    # Fetch and save scan types
     for project_id in project_ids:
-        scan_url = f"/data/projects/{project_id}/scan_types"
         try:
-            response = connection.get_json(scan_url)
+            response = connection.get_json(f"/data/projects/{project_id}/scan_types")
+            scan_types = [item['type'] for item in response.get('ResultSet', {}).get('Result', [])]
 
-            if response and 'ResultSet' in response and 'Result' in response['ResultSet']:
-                scan_types = [item['type'] for item in response['ResultSet']['Result']]
-                if not scan_types:
-                    continue
-
-                file_path = os.path.join(output_folder, f"{project_id}.json")
+            if scan_types:
+                file_path = os.path.join(args.output_folder, f"{project_id}.json")
                 with open(file_path, "w", encoding="utf-8") as f:
                     json.dump({"project_id": project_id, "scan_types": scan_types}, f, indent=4)
-
-        except RequestException as e:
-            print(f"[ERROR] Failed to fetch scan types for {project_id}: {e}")
+        except Exception:
+            print(f"[WARNING] Could not retrieve scan types for project: {project_id}")
 
     print("[INFO] Scan types retrieval and JSON saving completed.")
+
+
+
 
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.project_xml:
