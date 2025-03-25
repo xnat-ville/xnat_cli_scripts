@@ -36,7 +36,7 @@ def apply_sleep(args: argparse.Namespace) -> None:
         except ValueError:
             print("[ERROR] Invalid sleep value. Please provide a valid number.")
 
-def execute_list_investigator(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_list_investigator(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Handles listing of all investigators from the XNAT system.
 
@@ -118,7 +118,7 @@ def execute_list_investigator_pi(connection: XNATSession, args: argparse.Namespa
         for project_id in primary_projects:
             print(f"{inv_id}\t{project_id}")
 
-def execute_list_investigator_non_pi(connection: XNATSession, args: argparse.Namespace) -> None:
+def execute_list_investigator_investigator(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Lists investigators who are in the investigatorProjects list (non-primary).
     Output: investigator_id<TAB>project_id
@@ -157,15 +157,15 @@ def execute_list_investigator_non_pi(connection: XNATSession, args: argparse.Nam
         for project_id in investigator_projects:
             print(f"{inv_id}\t{project_id}")
 
-def execute_list_master(connection:xnat.session.XNATSession, args: argparse.Namespace) -> None:
-    if args.investigator_non_pi:
-        execute_list_investigator_non_pi(connection,args)
-    elif args.pi:
+def execute_list_master(connection:XNATSession, args: argparse.Namespace) -> None:
+    if args.investigator_investigator:
+        execute_list_investigator_investigator(connection,args)
+    elif args.investigator_pi:
         execute_list_investigator_pi(connection,args)
     else:
         execute_list_investigator(connection,args)   
 
-def execute_get_investigator_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_get_investigator_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves investigator data from XNAT and saves each investigator as an individual JSON file.
     Requires --output_folder to be specified.
@@ -195,11 +195,11 @@ def execute_get_investigator_json(connection: xnat.session.XNATSession, args: ar
 
     print("[INFO] Successfully saved investigator JSON files.")
 
-def execute_get_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.investigator_json:
         execute_get_investigator_json(connection, args)
     else:
-        print("[WARNING] No valid GET action specified. Use --get --investigator_json.")
+        print("[WARNING] No valid GET action specified.")
 
 
 # Reads a folder containing JSON files with individual Investigator records and PUT's them into XNAT
@@ -225,12 +225,55 @@ def execute_update_investigator_json(connection: xnat.session.XNATSession, args:
 
     print(f"Successfully updated investigator JSON files")
 
-def execute_update_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+def execute_update_investigator_pi(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates the PI (Principal Investigator) for projects based on a CSV file.
+    CSV Format: investigator_id<TAB>project_id
+    Sends a PUT request to /data/projects/{project_id} with the PI query parameter.
+    """
+
+    if not args.csv_file:
+        print("[ERROR] --csv is required for --update --pi")
+        return
+
+    updates = []
+    try:
+        with open(args.csv_file, mode='r') as file:
+            reader = csv.reader(file, delimiter='\t')
+            for row in reader:
+                if len(row) < 2:
+                    continue
+                investigator_id = row[0].strip()
+                project_id = row[1].strip()
+                updates.append((investigator_id, project_id))
+    except Exception:
+        print("[ERROR] Failed to read CSV file")
+        return
+
+    for investigator_id, project_id in updates:
+        endpoint = f"/data/projects/{project_id}"
+        params = {
+            "xnat:projectData/pi_xnat_investigatordata_id": investigator_id
+        }
+
+        try:
+            response = connection.put(endpoint, params=params)
+            apply_sleep(args)
+
+            if response.status_code == 200:
+                print(f"{investigator_id}\t{project_id}\tUPDATED")
+            else:
+                print(f"{investigator_id}\t{project_id}\tERROR")
+        except Exception:
+            print(f"{investigator_id}\t{project_id}\tERROR")
+
+def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.investigator_json:
         execute_update_investigator_json(connection, args)
+    elif args.investigator_pi:
+        execute_update_investigator_pi(connection, args)
     else:
-        print("[WARNING] No valid update action specified. Use --update --investigator_json.")
-
+        print("[WARNING] No valid update action specified.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract investigator JSON from XNAT")
@@ -245,7 +288,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--update',            dest='update',             help='Action is UPDATE (PUT)',           action='store_true')
 
     # These are objects of the operations
-    parser.add_argument(      '--investigator',      dest='investigator_non_pi',       help="List non-primary investigator project links",      action='store_true')
+    parser.add_argument(      '--investigator',      dest='investigator_investigator',       help="List non-primary investigator project links",      action='store_true')
     parser.add_argument(      '--investigator_json', dest='investigator_json',  help="Extract investigator JSON",       action='store_true')
     parser.add_argument(      '--pi',                dest='investigator_pi',                 help="List primary investigator project links",   action='store_true')
     parser.add_argument(      '--output_folder',     dest='output_folder',      help="Folder to store investigator JSON files")
