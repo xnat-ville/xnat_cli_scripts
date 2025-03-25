@@ -166,6 +166,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--input_folder',      dest='input_folder',       help="Folder with input JSON files")
 
     ## Further modifiers
+    parser.add_argument(       '--csv',              dest='csv',                help='Optional CSV file with investigator IDs to filter')
     parser.add_argument('-s', '--sleep',             dest='sleep',              help="Time to sleep after each REST call")
 
     args = parser.parse_args()
