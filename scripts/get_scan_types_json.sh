@@ -8,8 +8,8 @@
 get_scan_types() {
     export PYTHONPATH="$1/../src"
 
-    echo "Executing: python3 -m xnat_cli_scripts.projects $2 --get --scan_types --output_folder $3"
-    python3 -m xnat_cli_scripts.projects $2 --get --scan_types --output_folder "$3"
+    echo "python3 -m xnat_cli_scripts.projects $2 --get --scan_types --output_folder $3"
+          python3 -m xnat_cli_scripts.projects $2 --get --scan_types --output_folder $3
 }
 
 # Main starts here
@@ -33,5 +33,5 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-# Run the scan types retrieval
-get_scan_types "$BASE_FOLDER" "$BOILER_PLATE" "test_data/scan_types_json"
+rm -rf test_data/scan_types_json
+get_scan_types "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/scan_types_json"
