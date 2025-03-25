@@ -5,11 +5,11 @@
 #              Boiler Plate
 #              Output folder
 
-get_anon_scripts() {
+get_tracer_json_files() {
     export PYTHONPATH="$1/../src"
 
-    echo "python3 -m xnat_cli_scripts.projects $2 --get --anon --output_folder $3"
-          python3 -m xnat_cli_scripts.projects $2 --get --anon --output_folder $3
+    echo python3 -m xnat_cli_scripts.projects $2 --get --tracer_json --output_folder $3 
+         python3 -m xnat_cli_scripts.projects $2 --get --tracer_json --output_folder $3
 }
 
 # Main starts here
@@ -33,5 +33,5 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-rm -rf test_data/anon_scripts_json
-get_anon_scripts "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/anon_scripts_json"
+rm -rf test_data/tracer_json
+get_tracer_json_files "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" test_data/tracer_json
