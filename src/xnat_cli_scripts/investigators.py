@@ -77,9 +77,52 @@ def execute_list_investigators(connection: xnat.session.XNATSession, args: argpa
 
         print(f"{inv_id}\t{inv.get('lastname','')}\t{inv.get('firstname','')}\t{inv.get('email','')}\t{inv.get('institution','')}")
 
+def execute_list_investigator_pis(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Lists investigators who are primary PIs for projects.
+    Output: investigator_id<TAB>project_id (one line per project).
+    Optional CSV filter limits by investigator ID.
+    """
+
+    # Load investigator ID filter (if any)
+    filter_ids = set()
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as f:
+                reader = csv.reader(f, delimiter='\t')
+                for row in reader:
+                    for cell in row:
+                        cell = cell.strip()
+                        if cell.isdigit():
+                            filter_ids.add(int(cell))
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV filter: {e}")
+            return
+
+    try:
+        response = connection.get_json("/xapi/investigators")
+    except Exception as e:
+        print(f"[ERROR] Failed to retrieve investigator data: {e}")
+        return
+
+    apply_sleep(args)
+
+    for inv in response:
+        inv_id = inv.get("xnatInvestigatordataId")
+        if not inv_id:
+            continue
+        if filter_ids and inv_id not in filter_ids:
+            continue
+
+        primary_projects = inv.get("primaryProjects", [])
+        for project_id in primary_projects:
+            print(f"{inv_id}\t{project_id}")
 
 def execute_list_master(connection:xnat.session.XNATSession, args: argparse.Namespace) -> None:
-    execute_list_investigators(connection, args)   
+    if args.pi:
+        execute_list_investigator_pis(connection,args)
+    else:
+        execute_list_investigators(connection,args)   
 
 def execute_get_investigator_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     """
@@ -162,11 +205,12 @@ if __name__ == "__main__":
 
     # These are objects of the operations
     parser.add_argument(      '--investigator_json', dest='investigator_json',  help="Extract investigator JSON",       action='store_true')
+    parser.add_argument(      '--pi',                dest='pi',                 help="Used for PI_ID and project_ID",   action='store_true')
     parser.add_argument(      '--output_folder',     dest='output_folder',      help="Folder to store investigator JSON files")
     parser.add_argument(      '--input_folder',      dest='input_folder',       help="Folder with input JSON files")
 
     ## Further modifiers
-    parser.add_argument(       '--csv',              dest='csv',                help='Optional CSV file with investigator IDs to filter')
+    parser.add_argument(       '--csv',              dest='csv_file',                help='Optional CSV file with investigator IDs to filter')
     parser.add_argument('-s', '--sleep',             dest='sleep',              help="Time to sleep after each REST call")
 
     args = parser.parse_args()
