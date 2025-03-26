@@ -514,7 +514,11 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
         http_headers = {}
         http_headers['Content-Type'] = 'application/xml'
         listing = listdir(args.input_folder)
+        project_count = len(listing)
+        project_index = 1
         for f in listing:
+            print(f"{project_index} / {project_count} / {f}")
+            project_index += 1
             with open(f"{args.input_folder}/{f}") as xml_file:
                 project_id = str(Path(f).with_suffix(''))
                 put_path=f"/data/archive/projects/{project_id}"
@@ -577,8 +581,13 @@ def execute_get_project_xml(connection: XNATSession, args: argparse.Namespace) -
         for project_json in result:
             project_ids.append(project_json['ID'])
 
-
+    project_count = len(project_ids)
+    project_index = 1
     for id in project_ids:
+        if args.verbose:
+            print(f"{project_index} / {project_count} / {id}")
+            project_index += 1
+
         xml=connection.get(f"/data/projects/{id}?format=xml")
         z = xml.content
         f=open(f"{args.output_folder}/{id}.xml", "w")
@@ -697,15 +706,22 @@ def execute_get_scan_types_json(connection: XNATSession, args: argparse.Namespac
     # Fetch and save scan types
     for project_id in project_ids:
         try:
-            response = connection.get_json(f"/data/projects/{project_id}/scan_types")
-            scan_types = [item['type'] for item in response.get('ResultSet', {}).get('Result', [])]
+            get_path=f"/data/projects/{project_id}/scan_types"
+            response = connection.get(get_path)
+            scan_types_json = response.json()
+#            scan_types = [item['type'] for item in response.get('ResultSet', {}).get('Result', [])]
 
-            if scan_types:
-                file_path = os.path.join(args.output_folder, f"{project_id}.json")
+            if scan_types_json:
+                file_path = os.path.join(args.output_folder, f"{project_id}.scan_types.json")
                 with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump({"project_id": project_id, "scan_types": scan_types}, f, indent=4)
-        except Exception:
-            print(f"[WARNING] Could not retrieve scan types for project: {project_id}")
+                    json.dump(scan_types_json, f, indent=4)
+                    f.close()
+            else:
+                raise Exception(f"Could not get JSON representation of scan_type: {get_path}")
+#                with open(file_path, "w", encoding="utf-8") as f:
+#                    json.dump({"project_id": project_id, "scan_types": scan_types}, f, indent=4)
+        except Exception as e:
+            print(f"[WARNING] Could not retrieve scan types for project: {project_id}\n{e}")
 
     print("[INFO] Scan types retrieval and JSON saving completed.")
 
