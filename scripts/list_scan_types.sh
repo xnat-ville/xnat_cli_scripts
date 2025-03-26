@@ -5,7 +5,7 @@
 #              Boiler Plate
 #              Output file path
 
-get_scan_types() {
+list_scan_types() {
     export PYTHONPATH="$1/../src"
 
     echo "Executing: python3 -m xnat_cli_scripts.projects $2 --list --scan_types > $3"
@@ -34,5 +34,5 @@ set +e
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 # Run the scan types listing and redirect to output file
-get_scan_types "$BASE_FOLDER" "$BOILER_PLATE" "test_data/scan_types.csv"
+list_scan_types "$BASE_FOLDER" "$BOILER_PLATE" "test_data/scan_types.csv"
 

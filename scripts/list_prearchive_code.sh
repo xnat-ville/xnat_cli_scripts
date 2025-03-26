@@ -5,7 +5,7 @@
 #              Boiler Plate
 #              Output file path
 
-get_prearchive_codes() {
+list_prearchive_codes() {
     export PYTHONPATH="$1/../src"
 
     echo "python3 -m xnat_cli_scripts.projects $2 --list --prearchive_code > $3"
@@ -34,5 +34,5 @@ set +e
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 # Run the prearchive code listing
-get_prearchive_codes "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" test_data/prearchive_codes.txt
+list_prearchive_codes "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" test_data/prearchive_codes.txt
 
