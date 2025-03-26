@@ -229,7 +229,7 @@ def execute_update_investigator_pi(connection: XNATSession, args: argparse.Names
     """
     Updates the PI (Principal Investigator) for projects based on a CSV file.
     CSV Format: investigator_id<TAB>project_id
-    Sends a PUT request to /data/projects/{project_id} with the PI query parameter.
+    Sends a PUT request to /data/projects/{project_id}?xnat:projectData/pi_xnat_investigatordata_id={investigator_id}
     """
 
     if not args.csv_file:
@@ -246,32 +246,29 @@ def execute_update_investigator_pi(connection: XNATSession, args: argparse.Names
                 investigator_id = row[0].strip()
                 project_id = row[1].strip()
                 updates.append((investigator_id, project_id))
-    except Exception:
-        print("[ERROR] Failed to read CSV file")
+    except Exception as e:
+        print(f"[ERROR] Failed to read CSV file: {e}")
         return
 
     for investigator_id, project_id in updates:
-        endpoint = f"/data/projects/{project_id}"
-        params = {
-            "xnat:projectData/pi_xnat_investigatordata_id": investigator_id
-        }
+        url = f"/data/projects/{project_id}?xnat:projectData/pi_xnat_investigatordata_id={investigator_id}"
 
         try:
-            response = connection.put(endpoint, params=params)
+            response = connection.put(url)
             apply_sleep(args)
 
             if response.status_code == 200:
                 print(f"{investigator_id}\t{project_id}\tUPDATED")
             else:
-                print(f"{investigator_id}\t{project_id}\tERROR")
-        except Exception:
-            print(f"{investigator_id}\t{project_id}\tERROR")
+                print(f"{investigator_id}\t{project_id}\tERROR\t{response.status_code}: {response.text}")
+        except Exception as e:
+            print(f"{investigator_id}\t{project_id}\tERROR\t{str(e)}")
 
 def execute_update_investigator_investigator(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Updates the Investigator (Other Investigator) for projects based on a CSV file.
     CSV Format: investigator_id<TAB>project_id
-    Sends a PUT request to /data/projects/{project_id} with the Investigator query parameter.
+    Sends a PUT request to /data/projects/{project_id}?xnat:projectData/investigators/investigator/xnat_investigatordata_id={investigator_id}
     """
 
     if not args.csv_file:
@@ -288,26 +285,23 @@ def execute_update_investigator_investigator(connection: XNATSession, args: argp
                 investigator_id = row[0].strip()
                 project_id = row[1].strip()
                 updates.append((investigator_id, project_id))
-    except Exception:
-        print("[ERROR] Failed to read CSV file")
+    except Exception as e:
+        print(f"[ERROR] Failed to read CSV file: {e}")
         return
 
     for investigator_id, project_id in updates:
-        endpoint = f"/data/projects/{project_id}"
-        params = {
-            "xnat:projectData/investigators/investigator/xnat_investigatordata_id": investigator_id
-        }
+        url = f"/data/projects/{project_id}?xnat:projectData/investigators/investigator/xnat_investigatordata_id={investigator_id}"
 
         try:
-            response = connection.put(endpoint, params=params)
+            response = connection.put(url)
             apply_sleep(args)
 
             if response.status_code == 200:
                 print(f"{investigator_id}\t{project_id}\tUPDATED")
             else:
-                print(f"{investigator_id}\t{project_id}\tERROR")
-        except Exception:
-            print(f"{investigator_id}\t{project_id}\tERROR")
+                print(f"{investigator_id}\t{project_id}\tERROR\t{response.status_code}: {response.text}")
+        except Exception as e:
+            print(f"{investigator_id}\t{project_id}\tERROR\t{str(e)}")
 
 def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.investigator_json:
