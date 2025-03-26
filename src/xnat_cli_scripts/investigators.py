@@ -267,11 +267,55 @@ def execute_update_investigator_pi(connection: XNATSession, args: argparse.Names
         except Exception:
             print(f"{investigator_id}\t{project_id}\tERROR")
 
+def execute_update_investigator_investigator(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates the Investigator (Other Investigator) for projects based on a CSV file.
+    CSV Format: investigator_id<TAB>project_id
+    Sends a PUT request to /data/projects/{project_id} with the Investigator query parameter.
+    """
+
+    if not args.csv_file:
+        print("[ERROR] --csv is required for --update --investigator")
+        return
+
+    updates = []
+    try:
+        with open(args.csv_file, mode='r') as file:
+            reader = csv.reader(file, delimiter='\t')
+            for row in reader:
+                if len(row) < 2:
+                    continue
+                investigator_id = row[0].strip()
+                project_id = row[1].strip()
+                updates.append((investigator_id, project_id))
+    except Exception:
+        print("[ERROR] Failed to read CSV file")
+        return
+
+    for investigator_id, project_id in updates:
+        endpoint = f"/data/projects/{project_id}"
+        params = {
+            "xnat:projectData/investigators/investigator/xnat_investigatordata_id": investigator_id
+        }
+
+        try:
+            response = connection.put(endpoint, params=params)
+            apply_sleep(args)
+
+            if response.status_code == 200:
+                print(f"{investigator_id}\t{project_id}\tUPDATED")
+            else:
+                print(f"{investigator_id}\t{project_id}\tERROR")
+        except Exception:
+            print(f"{investigator_id}\t{project_id}\tERROR")
+
 def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.investigator_json:
         execute_update_investigator_json(connection, args)
     elif args.investigator_pi:
         execute_update_investigator_pi(connection, args)
+    elif args.investigator_investigator:
+        execute_update_investigator_investigator(connection,args)
     else:
         print("[WARNING] No valid update action specified.")
 
