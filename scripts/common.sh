@@ -10,11 +10,16 @@
 # DEV-COPY
 # DEV-LIVE
 # LOCALHOST
+# TARGET
 
 get_xnat_url() {
  url=""
 
  case "$1" in
+  # Todo: Need to fix
+  "TARGET")
+   url="http://localhost:8080" ;;
+
   "EXISTING")
    url="https://cnda-shadow07.nrg.wustl.edu";;
 
