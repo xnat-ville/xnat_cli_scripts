@@ -651,102 +651,143 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
             print(f"[ERROR] Failed to read CSV file: {e}")
             return
     else:
-        all_projects = connection.get_json("/data/projects")
-        project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        print("[INFO] No CSV file provided, attempting to retrieve anonymization scripts for all projects.")
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
 
     # Fetch and save anonymization scripts
     for project_id in project_ids:
         try:
             response = connection.get(f"/data/projects/{project_id}/config/anon")
-            if response.status_code == 404:
-                continue  # silently skip projects with no script
+            response.raise_for_status()
 
             script = response.json()
             if script:
-                file_path = f"{args.output_folder}/{project_id}.anon.json"
+                file_path = Path(args.output_folder) / f"{project_id}.anon.json"
                 with open(file_path, "w", encoding="utf-8") as f:
                     json.dump(script, f, indent=4)
-        except Exception:
-            continue  # quietly skip any project that errors out
+
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue
+            print(f"[ERROR] Failed to retrieve anonymization script for project {project_id}: {e}")
 
     print("[INFO] Anonymization scripts retrieval completed.")
 
 
-def execute_get_scan_types_json(connection: XNATSession, args: argparse.Namespace) -> None:
+def execute_get_tracer_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Retrieves scan types from XNAT projects and saves them as separate JSON files.
-    Each project's scan types are saved in the provided output folder.
-
-    If --csv_file is provided, only checks the listed projects.
+    Retrieves tracer information for projects and saves as JSON files.
+    Output file format: <projectID>.tracer.json
     """
     if not args.output_folder:
-        print("[ERROR] --output_folder is required.")
+        print("[ERROR] --output_folder is required for --get --tracer_json.")
         return
 
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
-    # Load project IDs
     project_ids = []
     if args.csv_file:
         try:
             with open(args.csv_file, mode='r') as file:
-                reader = csv.reader(file, delimiter='\t')
-                project_ids = [row[0].strip() for row in reader if row]
+                project_ids = [line.strip() for line in file if line.strip()]
         except Exception as e:
-            print(f"[ERROR] Could not read CSV file: {e}")
+            print(f"[ERROR] Failed to read CSV file: {e}")
             return
     else:
         try:
-            all_projects = connection.get_json("/data/projects")
-            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+            response = connection.get_json("/data/projects")
+            project_ids = [project['ID'] for project in response if 'ID' in project]
         except Exception as e:
-            print(f"[ERROR] Could not retrieve project list: {e}")
+            print(f"[ERROR] Failed to retrieve project list: {e}")
             return
 
-    # Fetch and save scan types
+    for project_id in project_ids:
+        tracer_url = f"/data/projects/{project_id}/config/tracers"
+
+        try:
+            response = connection.get_json(tracer_url)
+            if response:
+                output_file = Path(args.output_folder) / f"{project_id}.tracer.json"
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump(response, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue
+
+    print("[INFO] Tracer JSON retrieval complete.")
+
+
+def execute_get_tracer_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves tracer information for projects and saves as JSON files.
+    Output file format: <projectID>.tracer.json
+    """
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required for --get --tracer_json.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                project_ids = [line.strip() for line in file if line.strip()]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            response = connection.get_json("/data/projects")
+            project_ids = [project['ID'] for project in response if 'ID' in project]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
+
     for project_id in project_ids:
         try:
-            get_path=f"/data/projects/{project_id}/scan_types"
-            response = connection.get(get_path)
-            scan_types_json = response.json()
-#            scan_types = [item['type'] for item in response.get('ResultSet', {}).get('Result', [])]
+            response = connection.get(f"/data/projects/{project_id}/config/tracers")
+            response.raise_for_status()
 
-            if scan_types_json:
-                file_path = os.path.join(args.output_folder, f"{project_id}.scan_types.json")
-                with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(scan_types_json, f, indent=4)
-                    f.close()
-            else:
-                raise Exception(f"Could not get JSON representation of scan_type: {get_path}")
-#                with open(file_path, "w", encoding="utf-8") as f:
-#                    json.dump({"project_id": project_id, "scan_types": scan_types}, f, indent=4)
-        except Exception as e:
-            print(f"[WARNING] Could not retrieve scan types for project: {project_id}\n{e}")
+            output_file = Path(args.output_folder) / f"{project_id}.tracer.json"
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(response.json(), f, indent=4)
+        except Exception:
+            # Suppress all other errors and move on to the next project
+            continue
 
-    print("[INFO] Scan types retrieval and JSON saving completed.")
-
+    print("[INFO] Tracer JSON retrieval complete.")
 
 
 
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.project_xml:
-        if args.output_folder:
-            execute_get_project_xml(connection, args)
-        else:
-            print("[WARNING] No output folder provided.")
+        execute_get_project_xml(connection, args)
         return  
 
     if args.seriesImportFilter:
         execute_get_series_import_filter_json(connection, args)
         return
+
     if args.anon:
         execute_get_anon_scripts_json(connection, args)
         return
+
     if args.scan_types:
         execute_get_scan_types_json(connection, args)
         return
 
+    if args.tracer_json:
+        execute_get_tracer_json(connection, args)
+        return
+
     print("[ERROR] No valid 'GET' action specified.")
+
 
 
 #def execute_project_list(session: XNATSession, args: argparse.Namespace) -> None:
@@ -824,7 +865,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--anon',            dest='anon',                     help="List anonymization status for projects",     action='store_true')
     parser.add_argument(      '--scan_types',      dest='scan_types',               help='List scan types',                            action='store_true')
     parser.add_argument(      '--prearchive_code', dest='prearchive_code',          help="List prearchive code for projects",          action='store_true')
-
+    parser.add_argument(      '--tracer_json',     dest='tracer_json',              help="Retrieve tracer information for projects",   action='store_true')
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
