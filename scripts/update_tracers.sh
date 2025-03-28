@@ -33,4 +33,4 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-upate_tracers "$BASE_FOLDER" "$BOILER_PLATE  "test_data/tracer_json"
+update_tracers "$BASE_FOLDER" "$BOILER_PLATE" "test_data/tracer_json"

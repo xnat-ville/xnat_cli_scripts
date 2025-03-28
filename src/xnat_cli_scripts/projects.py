@@ -528,6 +528,47 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
     except Exception as e:
         print(f"[ERROR] Exception while reading through folder: {args.input_folder}\n{e}")
 
+def execute_update_tracer_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates tracer information for projects using JSON files.
+    Each file should be named <projectID>.tracer.json.
+    Sends a PUT request to /data/projects/{project_id}/config/tracers.
+    """
+
+    if not args.input_folder:
+        print("[ERROR] --input_folder is required for --update --tracer_json.")
+        return
+
+    # Ensure the input folder exists
+    input_path = Path(args.input_folder)
+    if not input_path.is_dir():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
+
+    # Find all .tracer.json files
+    tracer_files = list(input_path.glob("*.tracer.json"))
+    if not tracer_files:
+        print(f"[ERROR] No tracer JSON files found in {args.input_folder}")
+        return
+
+    for tracer_file in tracer_files:
+        project_id = tracer_file.stem.replace(".tracer", "")
+        try:
+            with open(tracer_file, 'r', encoding='utf-8') as f:
+                tracer_data = json.load(f)
+
+            endpoint = f"/data/projects/{project_id}/config/tracers"
+            response = connection.put(endpoint, json=tracer_data)
+            apply_sleep(args)
+
+            if response.status_code == 200:
+                print(f"{project_id}\tUPDATED")
+            else:
+                print(f"{project_id}\tERROR\t{response.status_code}: {response.text}")
+        except Exception as e:
+            print(f"{project_id}\tERROR\t{e}")
+
+    print("[INFO] Tracer updates complete.")
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
     
@@ -550,7 +591,6 @@ def execute_remove_master(connection: XNATSession, args: argparse.Namespace) -> 
     if args.groups:
         execute_remove_groups(connection, args)
 
-
 def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.groups:
         execute_update_groups(connection, args)
@@ -561,8 +601,11 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
             execute_update_project_xml(connection, args)
         else:
             print("[WARNING] No input folder provided for project XML update.")
+    elif args.tracer_json:
+        execute_update_tracer_json(connection, args)
     else:
-        print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml or -g and --csv.")
+        print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
+
 
 def execute_get_project_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
@@ -866,6 +909,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--scan_types',      dest='scan_types',               help='List scan types',                            action='store_true')
     parser.add_argument(      '--prearchive_code', dest='prearchive_code',          help="List prearchive code for projects",          action='store_true')
     parser.add_argument(      '--tracer_json',     dest='tracer_json',              help="Retrieve tracer information for projects",   action='store_true')
+
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
