@@ -664,7 +664,7 @@ def execute_get_series_import_filter_json(connection: XNATSession, args: argpars
             if response:
                 file_path = f"{output_folder}/{project_id}.seriesImportFilter.json"
                 with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(response, f, indent=4)
+                    json.dump(response, f)
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
                 continue
@@ -712,7 +712,7 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
             if script:
                 file_path = Path(args.output_folder) / f"{project_id}.anon.json"
                 with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(script, f, indent=4)
+                    json.dump(script, f)
 
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
@@ -757,7 +757,7 @@ def execute_get_tracer_json(connection: XNATSession, args: argparse.Namespace) -
             if response:
                 output_file = Path(args.output_folder) / f"{project_id}.tracer.json"
                 with open(output_file, "w", encoding="utf-8") as f:
-                    json.dump(response, f, indent=4)
+                    json.dump(response, f)
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
                 continue
@@ -799,7 +799,7 @@ def execute_get_tracer_json(connection: XNATSession, args: argparse.Namespace) -
 
             output_file = Path(args.output_folder) / f"{project_id}.tracer.json"
             with open(output_file, "w", encoding="utf-8") as f:
-                json.dump(response.json(), f, indent=4)
+                json.dump(response.json(), f)
         except Exception:
             # Suppress all other errors and move on to the next project
             continue
