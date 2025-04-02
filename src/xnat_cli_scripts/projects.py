@@ -530,45 +530,49 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
 
 def execute_update_tracer_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Updates tracer information for projects using JSON files.
-    Each file should be named <projectID>.tracer.json.
-    Sends a PUT request to /data/projects/{project_id}/config/tracers.
+    Update/upload tracer JSON by reading individual .tracer.json files in an input folder.
     """
 
-    if not args.input_folder:
-        print("[ERROR] --input_folder is required for --update --tracer_json.")
-        return
+    if args.input_folder is None:
+        raise Exception("investigators --update --tracer_json requires --input_folder")
 
-    # Ensure the input folder exists
-    input_path = Path(args.input_folder)
-    if not input_path.is_dir():
-        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
-        return
+    had_error = False
 
-    # Find all .tracer.json files
-    tracer_files = list(input_path.glob("*.tracer.json"))
-    if not tracer_files:
-        print(f"[ERROR] No tracer JSON files found in {args.input_folder}")
-        return
+    try:
+        http_headers = {}
+        http_headers['Content-Type'] = 'application/json'
 
-    for tracer_file in tracer_files:
-        project_id = tracer_file.stem.replace(".tracer", "")
-        try:
-            with open(tracer_file, 'r', encoding='utf-8') as f:
-                tracer_data = json.load(f)
+        listing = listdir(args.input_folder)
+        project_count = len(listing)
+        project_index = 1
 
-            endpoint = f"/data/projects/{project_id}/config/tracers"
-            response = connection.put(endpoint, json=tracer_data)
-            apply_sleep(args)
+        for f in listing:
+            print(f"{project_index} / {project_count} / {f}")
+            project_index += 1
 
-            if response.status_code == 200:
-                print(f"{project_id}\tUPDATED")
-            else:
-                print(f"{project_id}\tERROR\t{response.status_code}: {response.text}")
-        except Exception as e:
-            print(f"{project_id}\tERROR\t{e}")
+            project_id = str(Path(f).with_suffix('')).replace(".tracer", "")
+            put_path = f"/data/projects/{project_id}/config/tracers"
 
-    print("[INFO] Tracer updates complete.")
+            try:
+                with open(f"{args.input_folder}/{f}", 'r', encoding='utf-8') as tracer_file:
+                    response = connection.put(put_path, data=tracer_file, headers=http_headers)
+
+                if response.status_code in [200, 201]:
+                    print(f"{project_id}\tUPDATED")
+                else:
+                    print(f"[ERROR] Invalid status for response from XNATSession for url {connection.host}{put_path} (status {response.status_code}, accepted status: [200, 201])")
+                    had_error = True
+
+            except Exception as e:
+                print(f"{project_id}\tERROR: {e}")
+                had_error = True
+
+    except Exception as e:
+        print(f"[ERROR] Exception while reading through folder: {args.input_folder}\n{e}")
+        had_error = True
+
+    if not had_error:
+        print("[INFO] Tracer updates complete.")
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
     
@@ -724,9 +728,10 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
 
 def execute_get_tracer_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Retrieves tracer information for projects and saves as JSON files.
-    Output file format: <projectID>.tracer.json
+    Retrieves tracer JSON exactly as returned by the server.
+    Saves raw JSON content for each project as <projectID>.tracer.json.
     """
+
     if not args.output_folder:
         print("[ERROR] --output_folder is required for --get --tracer_json.")
         return
@@ -734,49 +739,7 @@ def execute_get_tracer_json(connection: XNATSession, args: argparse.Namespace) -
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
     project_ids = []
-    if args.csv_file:
-        try:
-            with open(args.csv_file, mode='r') as file:
-                project_ids = [line.strip() for line in file if line.strip()]
-        except Exception as e:
-            print(f"[ERROR] Failed to read CSV file: {e}")
-            return
-    else:
-        try:
-            response = connection.get_json("/data/projects")
-            project_ids = [project['ID'] for project in response if 'ID' in project]
-        except Exception as e:
-            print(f"[ERROR] Failed to retrieve project list: {e}")
-            return
 
-    for project_id in project_ids:
-        tracer_url = f"/data/projects/{project_id}/config/tracers"
-
-        try:
-            response = connection.get_json(tracer_url)
-            if response:
-                output_file = Path(args.output_folder) / f"{project_id}.tracer.json"
-                with open(output_file, "w", encoding="utf-8") as f:
-                    json.dump(response, f)
-        except xnat.exceptions.XNATResponseError as e:
-            if "404" in str(e):
-                continue
-
-    print("[INFO] Tracer JSON retrieval complete.")
-
-
-def execute_get_tracer_json(connection: XNATSession, args: argparse.Namespace) -> None:
-    """
-    Retrieves tracer information for projects and saves as JSON files.
-    Output file format: <projectID>.tracer.json
-    """
-    if not args.output_folder:
-        print("[ERROR] --output_folder is required for --get --tracer_json.")
-        return
-
-    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
-
-    project_ids = []
     if args.csv_file:
         try:
             with open(args.csv_file, mode='r') as file:
@@ -795,18 +758,18 @@ def execute_get_tracer_json(connection: XNATSession, args: argparse.Namespace) -
     for project_id in project_ids:
         try:
             response = connection.get(f"/data/projects/{project_id}/config/tracers")
-            response.raise_for_status()
-
             output_file = Path(args.output_folder) / f"{project_id}.tracer.json"
+
             with open(output_file, "w", encoding="utf-8") as f:
-                json.dump(response.json(), f)
-        except Exception:
-            # Suppress all other errors and move on to the next project
-            continue
+                f.write(response.content.decode("utf-8"))
 
-    print("[INFO] Tracer JSON retrieval complete.")
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
 
-
+    print("[INFO] Raw Tracer JSON retrieval complete.")
 
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.project_xml:
