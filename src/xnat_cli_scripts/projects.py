@@ -691,7 +691,7 @@ def execute_get_series_import_filter_json(connection: XNATSession, args: argpars
             if response:
                 file_path = f"{output_folder}/{project_id}.seriesImportFilter.json"
                 with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(response, f)
+                    json.dump(response, f, indent=4)
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
                 continue
@@ -739,7 +739,7 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
             if script:
                 file_path = Path(args.output_folder) / f"{project_id}.anon.json"
                 with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(script, f)
+                    json.dump(script, f, indent=4)
 
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
@@ -785,7 +785,7 @@ def execute_get_scan_types_json(connection: XNATSession, args: argparse.Namespac
 
             out_file = Path(args.output_folder) / f"{project_id}.scan_types.json"
             with open(out_file, "w", encoding="utf-8") as f:
-                json.dump(scan_json, f, indent=2)
+                json.dump(scan_json, f, indent=4)
 
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
