@@ -528,51 +528,74 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
     except Exception as e:
         print(f"[ERROR] Exception while reading through folder: {args.input_folder}\n{e}")
 
-def execute_update_tracer_json(connection: XNATSession, args: argparse.Namespace) -> None:
+
+def execute_update_tracer_json(connection, args):
     """
-    Update/upload tracer JSON by reading individual .tracer.json files in an input folder.
+    Transfers tracer config from .tracer.json files by:
+    1. Extracting all 'contents' fields
+    2. Writing them to .tracer.txt in test_data/tracer_json/txt/
+    3. PUTting that text to the destination XNAT instance
     """
 
-    if args.input_folder is None:
-        raise Exception("investigators --update --tracer_json requires --input_folder")
+    if not args.input_folder:
+        print("[ERROR] --input_folder is required.")
+        return
+
+    # Set txt output folder path
+    txt_folder = Path("test_data/tracer_json/txt")
+    txt_folder.mkdir(parents=True, exist_ok=True)
+
+    # Read .tracer.json files
+    listing = os.listdir(args.input_folder)
+    tracer_files = [f for f in listing if f.endswith(".tracer.json")]
+    if not tracer_files:
+        print("[INFO] No .tracer.json files found.")
+        return
 
     had_error = False
 
-    try:
-        http_headers = {}
-        http_headers['Content-Type'] = 'application/json'
+    for filename in tracer_files:
+        project_id = Path(filename).with_suffix('').with_suffix('').name
+        full_json_path = Path(args.input_folder) / filename
+        txt_output_path = txt_folder / f"{project_id}.tracer.txt"
 
-        listing = listdir(args.input_folder)
-        project_count = len(listing)
-        project_index = 1
+        try:
+            with open(full_json_path, "r", encoding="utf-8") as f:
+                content = json.load(f)
 
-        for f in listing:
-            print(f"{project_index} / {project_count} / {f}")
-            project_index += 1
+            results = content.get("ResultSet", {}).get("Result", [])
+            tracer_lines = [entry.get("contents", "").strip() for entry in results if entry.get("contents", "").strip()]
 
-            project_id = str(Path(f).with_suffix('')).replace(".tracer", "")
-            put_path = f"/data/projects/{project_id}/config/tracers"
+            if not tracer_lines:
+                print(f"[WARNING] No valid contents found in {filename}")
+                had_error = True
+                continue
 
-            try:
-                with open(f"{args.input_folder}/{f}", 'r', encoding='utf-8') as tracer_file:
-                    response = connection.put(put_path, data=tracer_file, headers=http_headers)
+            # Write the .tracer.txt file to the correct path
+            with open(txt_output_path, "w", encoding="utf-8") as f_out:
+                for line in tracer_lines:
+                    f_out.write(line + "\n")
 
-                if response.status_code in [200, 201]:
-                    print(f"{project_id}\tUPDATED")
-                else:
-                    print(f"[ERROR] Invalid status for response from XNATSession for url {connection.host}{put_path} (status {response.status_code}, accepted status: [200, 201])")
-                    had_error = True
+            # PUT request
+            put_url = f"/data/projects/{project_id}/config/tracers/tracers"
+            with open(txt_output_path, "r", encoding="utf-8") as f_txt:
+                txt_data = f_txt.read()
 
-            except Exception as e:
-                print(f"{project_id}\tERROR: {e}")
+            headers = {'Content-Type': 'text/plain'}
+            response = connection.put(put_url, data=txt_data, headers=headers)
+
+            if response.status_code not in [200, 201]:
+                print(f"[ERROR] PUT failed for {project_id}: {response.status_code} {response.text}")
                 had_error = True
 
-    except Exception as e:
-        print(f"[ERROR] Exception while reading through folder: {args.input_folder}\n{e}")
-        had_error = True
+        except Exception as e:
+            print(f"[ERROR] Failed to process {filename}: {e}")
+            had_error = True
 
-    if not had_error:
-        print("[INFO] Tracer updates complete.")
+    if had_error:
+        print("[ERROR] Tracer processing finished with some errors.")
+    else:
+        print("[INFO] All tracers have been updated successfully.")
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
     
