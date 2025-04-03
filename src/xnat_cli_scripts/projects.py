@@ -748,6 +748,53 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
 
     print("[INFO] Anonymization scripts retrieval completed.")
 
+def execute_get_scan_types_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves scan types for each project and saves them as JSON files.
+    Output filename: <projectID>.scan_types.json
+    """
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Load project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/scan_types")
+            response.raise_for_status()
+            scan_json = response.json()
+
+            out_file = Path(args.output_folder) / f"{project_id}.scan_types.json"
+            with open(out_file, "w", encoding="utf-8") as f:
+                json.dump(scan_json, f, indent=2)
+
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue
+            print(f"[ERROR] {project_id}: {e}")
+        except Exception as e:
+            print(f"[ERROR] Unexpected error for {project_id}: {e}")
+
+    print("[INFO] Scan type JSON retrieval complete.")
 
 def execute_get_tracer_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
