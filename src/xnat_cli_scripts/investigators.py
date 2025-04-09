@@ -148,6 +148,58 @@ def execute_update_master(connection: xnat.session.XNATSession, args: argparse.N
         print("[WARNING] No valid update action specified. Use --update --investigator_json.")
 
 
+# Reads a folder containing JSON files with individual Investigator records and PUT's them into XNAT
+def execute_create_investigator_json(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+    if args.input_folder is None:
+        raise Exception("investigators --create --investigator_json requires --input_folder")
+
+    investigator_ids = []
+    if args.csv:
+        try:
+            with open(args.csv, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                investigator_ids = [row[0].strip() for row in csv_reader if row]
+        except FileNotFoundError:
+            print(f"[ERROR] CSV file not found: {args.csv_file}")
+            return
+        except Exception as e:
+            print(f"[ERROR] Exception while reading CSV: {e}")
+            return
+
+    # If we did not get investigator IDs from a CSV file, read the folder of files and build the list.
+    if len(investigator_ids) == 0:
+        try:
+            listing = listdir(args.input_folder)
+            for f in listing:
+                numeric_id = f.split('.')[0]
+                investigator_ids.append(numeric_id)
+        except Exception as e:
+            raise Exception(f"[ERROR] Exception while getting list of files in folder: {args.input_folder}\n{e}")
+
+    try:
+        http_headers = {}
+        http_headers['Content-Type'] = 'application/json'
+        for id in investigator_ids:
+            print(id)
+            with open(f"{args.input_folder}/{id}.json") as json_file:
+                post_path = f"/xapi/investigators"
+                connection.post(post_path, data=json_file, headers=http_headers)
+                json_file.close()
+
+    except Exception as e:
+        raise Exception(f"[ERROR] Exception while reading through folder: {args.input_folder}\n{e}")
+
+    print(f"Successfully created investigator JSON files")
+
+
+
+def execute_create_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
+    if args.investigator_json:
+        execute_create_investigator_json(connection, args)
+    else:
+        print("[WARNING] No valid update action specified. Use --create --investigator_json.")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract investigator JSON from XNAT")
     parser.add_argument('-x', '--xnat',              dest='url',                help="URL to XNAT instance",             required=True)
@@ -159,6 +211,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--list',              dest='list',               help="Action is LIST",                   action='store_true')
     parser.add_argument(      '--get',               dest='get',                help="Action is GET",                    action='store_true')
     parser.add_argument(      '--update',            dest='update',             help='Action is UPDATE (PUT)',           action='store_true')
+    parser.add_argument(      '--create',            dest='create',             help='Action is CREATE (POST)',          action='store_true')
 
     # These are objects of the operations
     parser.add_argument(      '--investigator_json', dest='investigator_json',  help="Extract investigator JSON",       action='store_true')
@@ -183,6 +236,8 @@ if __name__ == "__main__":
         execute_get_master(session, args)
     elif args.update:
         execute_update_master(session, args)
+    elif args.create:
+        execute_create_master(session, args)
     else:
         print("[ERROR] No valid action specified. Use --get or --update.")
 
