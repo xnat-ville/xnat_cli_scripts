@@ -463,6 +463,62 @@ def execute_list_project_accessibilities(connection: XNATSession, args: argparse
         # Print the project ID and its accessibility
         print(f"{project_id}\t{accessibility}")
 
+
+def execute_list_project_configs(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Lists project configs.
+    Output format: {project}{tab}{tool}.
+    """
+    project_ids_from_csv = None
+
+    # If CSV file is specified, read project IDs from CSV
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids_from_csv = [row[0].strip() for row in csv_reader if row]  # Handle empty rows
+        except FileNotFoundError:
+            print(f"[ERROR] CSV file not found: {args.csv_file}")
+            return
+        except Exception as e:
+            print(f"[ERROR] Exception while reading CSV: {e}")
+            return
+
+    # Get all projects using `connection`
+    all_projects = connection.get_json("/data/projects")
+
+    apply_sleep(args)  # Apply sleep after API call
+
+    if 'ResultSet' not in all_projects or 'Result' not in all_projects['ResultSet']:
+        print("[ERROR] Unexpected response format from /data/projects")
+        return
+
+    result = all_projects['ResultSet']['Result']
+
+    for project_json in result:
+        project_id = project_json.get('ID')
+        if not project_id:
+            print(f"[ERROR] Missing 'ID' for project: {project_json}")
+            continue
+
+        # If CSV is used, check if the project is in the CSV list
+        if project_ids_from_csv and project_id not in project_ids_from_csv:
+            continue
+
+        try:
+            configs_response = connection.get_json(f"/data/projects/{project_id}/config")
+            configs = "XX"
+
+            apply_sleep(args)  # Apply sleep after each REST call
+
+            configs = configs_response['ResultSet']['Result']
+            for config in configs:
+                print(f"{project_id}\t{config['tool']}")
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue
+
+
 def execute_update_accessibilities(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Update the accessibility of projects based on the CSV file.
@@ -650,6 +706,8 @@ def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> No
         execute_list_project_groups(connection, args)
     elif args.accessibilities:
         execute_list_project_accessibilities(connection, args)
+    elif args.configs:
+        execute_list_project_configs(connection, args)
     else:
         execute_list_projects(connection, args)
 
@@ -981,7 +1039,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--scan_types',      dest='scan_types',               help='List scan types',                            action='store_true')
     parser.add_argument(      '--prearchive_code', dest='prearchive_code',          help="List prearchive code for projects",          action='store_true')
     parser.add_argument(      '--tracer_json',     dest='tracer_json',              help="Retrieve tracer information for projects",   action='store_true')
-
+    parser.add_argument(      '--configs',         dest='configs',                  help="Specify configs for list/get",               action='store_true')
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
