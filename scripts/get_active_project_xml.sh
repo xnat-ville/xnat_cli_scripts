@@ -33,4 +33,10 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-get_project_xml_files "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt " test_data/active_project_xml
+rm -rf test_data/active_project_xml test_data/processed_active_project_xml
+get_project_xml_files "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt --verbose " test_data/active_project_xml
+
+
+echo $BASE_FOLDER/processProjectXML.sh	\
+	test_data/active_project_xml test_data/processed_active_project_xml	\
+	NA test_data/datatypes_to_remove.txt
