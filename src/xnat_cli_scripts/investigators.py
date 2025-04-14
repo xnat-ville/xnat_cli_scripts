@@ -160,7 +160,7 @@ def execute_create_investigator_json(connection: xnat.session.XNATSession, args:
                 csv_reader = csv.reader(file, delimiter='\t')
                 investigator_ids = [row[0].strip() for row in csv_reader if row]
         except FileNotFoundError:
-            print(f"[ERROR] CSV file not found: {args.csv_file}")
+            print(f"[ERROR] CSV file not found: {args.csv}")
             return
         except Exception as e:
             print(f"[ERROR] Exception while reading CSV: {e}")
