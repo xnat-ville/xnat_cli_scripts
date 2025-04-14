@@ -501,6 +501,19 @@ def execute_update_accessibilities(connection: XNATSession, args: argparse.Names
         except Exception as e:
             print(f"[ERROR] Exception while reading CSV: {e}")
 
+def upload_project_xml_template(connection: XNATSession, args: argparse.Namespace, project_id: str) -> None:
+    if (args.template is None):
+        return
+
+    template_xml = xnat_cli_scripts.cli_common.read_text_file(args.template)
+    project_xml  = template_xml.replace("PROJECT_ID", project_id)
+    http_headers = {}
+    http_headers['Content-Type'] = 'application/xml'
+    put_path = f"/data/projects/{project_id}"
+
+    # Let the function that called this trap the exception
+    print(f"Upload template version of project XML: {put_path}")
+    connection.put(put_path, data=project_xml, headers=http_headers)
 
 def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -510,23 +523,49 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
     if args.input_folder is None:
         raise Exception("projects --update --project_xml requires --input_folder")
 
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except FileNotFoundError:
+            print(f"[ERROR] CSV file not found: {args.csv_file}")
+            return
+        except Exception as e:
+            print(f"[ERROR] Exception while reading CSV: {e}")
+            return
+    else:
+        try:
+            listing = listdir(args.input_folder)
+            for f in listing:
+                # File name should be something like Project_ID.xml
+                id = f.split('.')[0]
+                project_ids.append(id)
+        except Exception as e:
+            raise Exception(f"[ERROR] Exception while getting list of files in folder: {args.input_folder}\n{e}")
+
     try:
         http_headers = {}
         http_headers['Content-Type'] = 'application/xml'
-        listing = listdir(args.input_folder)
-        project_count = len(listing)
+        project_count = len(project_ids)
         project_index = 1
-        for f in listing:
-            print(f"{project_index} / {project_count} / {f}")
+        response = ""
+        file_path="XX"
+        for id in project_ids:
+            if (not id.startswith("#")):
+                upload_project_xml_template(connection, args, id)
+                file_path=f"{args.input_folder}/{id}.xml"
+                print(f"{project_index} / {project_count} / {id}.xml")
+                with open(file_path) as xml_file:
+                    put_path = f"/data/projects/{id}"
+                    print(f"Upload project XML: {put_path}")
+                    response=connection.put(put_path, data=xml_file, headers=http_headers)
+                    xml_file.close()
             project_index += 1
-            with open(f"{args.input_folder}/{f}") as xml_file:
-                project_id = str(Path(f).with_suffix(''))
-                put_path=f"/data/archive/projects/{project_id}"
-                connection.put(put_path, data=xml_file, headers=http_headers)
-                xml_file.close()
-
     except Exception as e:
-        print(f"[ERROR] Exception while reading through folder: {args.input_folder}\n{e}")
+        print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}")
+
 
 
 def execute_update_tracer_json(connection, args):
@@ -951,7 +990,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--csv',             dest='csv_file',                 help='Path to CSV file operations such as listing, removing, or changing groups')
     parser.add_argument(      '--input_folder',    dest='input_folder',             help='Path to input folder of files')
     parser.add_argument(      '--output_folder',   dest='output_folder',            help='Path to output folder')
-
+    parser.add_argument(      '--template',        dest='template',                 help='Path to a template file')
     args = parser.parse_args()
 
     args.url = "localhost:8080" if args.url is None else args.url
