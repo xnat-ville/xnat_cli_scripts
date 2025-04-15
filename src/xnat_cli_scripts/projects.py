@@ -26,6 +26,7 @@ from os.path import isfile
 #import xnat
 #import xnat.core
 import xnat.mixin
+from requests import RequestException
 from xnat.session import XNATSession
 from xnat.exceptions import XNATResponseError
 import xnat_cli_scripts.cli_common
