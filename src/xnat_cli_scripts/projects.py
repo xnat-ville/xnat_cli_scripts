@@ -26,6 +26,7 @@ from os.path import isfile
 #import xnat
 #import xnat.core
 import xnat.mixin
+from requests import RequestException
 from xnat.session import XNATSession
 from xnat.exceptions import XNATResponseError
 import xnat_cli_scripts.cli_common
@@ -1028,7 +1029,60 @@ def execute_get_tracer_json(connection: XNATSession, args: argparse.Namespace) -
 
     print("[INFO] Raw Tracer JSON retrieval complete.")
 
+def execute_get_subject_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    # Check if output folder is provided
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
+
+    # Load project IDs from CSV if provided, otherwise get all from XNAT
+    project_ids = []
+
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch project list: {e}")
+            return
+
+    for project_id in project_ids:
+        project_folder = Path(args.output_folder) / project_id
+        project_folder.mkdir(parents=True, exist_ok=True)
+
+        try:
+            subject_list = connection.get_json(f"/data/projects/{project_id}/subjects")
+            subjects = subject_list.get('ResultSet', {}).get('Result', [])
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch subjects for {project_id}: {e}")
+            continue  # Move on to the next project
+
+        for subject in subjects:
+            subject_id = subject.get('ID')
+            if not subject_id:
+                continue  # skip malformed entry
+
+            try:
+                subject_json = connection.get_json(f"/data/subjects/{subject_id}")
+                output_file = project_folder / f"{subject_id}.subject.json"
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump(subject_json, f, indent=4)
+            except Exception as e:
+                print(f"[ERROR] Failed to fetch/save subject {subject_id} in project {project_id}: {e}")
+
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
+    if args.subjects:
+        execute_get_subject_json(connection, args)
+        return
+
     if args.project_xml:
         execute_get_project_xml(connection, args)
         return  
@@ -1120,6 +1174,7 @@ if __name__ == "__main__":
     # These are objects of the operations; 
     parser.add_argument('-u', '--users',           dest='users',                    help='Listing Verb object: Users',                 action='store_true')
     parser.add_argument('-g', '--groups',          dest='groups',                   help='Object: Groups (for both LIST and REMOVE)',  action='store_true')
+    parser.add_argument(      '--subjects',        dest='subjects',                 help='Include list of subjects in output',         action='store_true')                   
     parser.add_argument(    '--seriesImportFilter',dest='seriesImportFilter',       help="Extract series import filter for projects",  action='store_true')
     parser.add_argument(      '--accessibilities', dest='accessibilities',          help="Accessibilities for projects",               action='store_true')
     parser.add_argument(      '--subjects',        dest='subjects',                 help="Include list of subjects in output",         action='store_true')
