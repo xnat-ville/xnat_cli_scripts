@@ -3,6 +3,7 @@
 
 import argparse
 from typing import Union
+import json
 
 # Common functions for CLI executables
 
@@ -35,5 +36,11 @@ def extract_extension_types(args: argparse.Namespace) -> bool:
 def read_text_file(file_path: str) -> str:
     with open(file_path, "r") as file:
         content = file.read()
+        file.close()
+        return content
+
+def read_json_file(file_path: str):
+    with open(file_path, "r") as file:
+        content = json.load(file)
         file.close()
         return content
