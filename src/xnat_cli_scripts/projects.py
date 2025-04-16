@@ -1087,7 +1087,6 @@ if __name__ == "__main__":
     parser.add_argument(      '--subjects',        dest='subjects',                 help='Include list of subjects in output',         action='store_true')                   
     parser.add_argument(    '--seriesImportFilter',dest='seriesImportFilter',       help="Extract series import filter for projects",  action='store_true')
     parser.add_argument(      '--accessibilities', dest='accessibilities',          help="Accessibilities for projects",               action='store_true')
-    parser.add_argument(      '--subjects',        dest='subjects',                 help="Include list of subjects in output",         action='store_true')
     parser.add_argument(      '--sessions',        dest='sessions',                 help="Include list of sessions in output",         action='store_true')
     parser.add_argument(      '--project_xml',     dest='project_xml',              help='Extract/Operate on Project XML',             action='store_true')
     parser.add_argument(      '--anon',            dest='anon',                     help="List anonymization status for projects",     action='store_true')
