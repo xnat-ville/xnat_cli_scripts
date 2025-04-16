@@ -1067,16 +1067,22 @@ def execute_get_subject_json(connection: XNATSession, args: argparse.Namespace) 
 
         for subject in subjects:
             subject_id = subject.get('ID')
-            if not subject_id:
-                continue  # skip malformed entry
+            if not subject_id or 'label' not in subject:
+                continue  # Skip malformed entries
 
             try:
-                subject_json = connection.get_json(f"/data/subjects/{subject_id}")
+                response = connection.get(f"/data/subjects/{subject_id}", format="json", timeout=300)
+                subject_json = response.json()
+
                 output_file = project_folder / f"{subject_id}.subject.json"
                 with open(output_file, "w", encoding="utf-8") as f:
                     json.dump(subject_json, f, indent=4)
+
             except Exception as e:
                 print(f"[ERROR] Failed to fetch/save subject {subject_id} in project {project_id}: {e}")
+
+    print("[INFO] Subject JSON retrieval completed successfully.")
+
 
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.subjects:
