@@ -407,6 +407,94 @@ def execute_update_groups(connection: XNATSession, args: argparse.Namespace) -> 
         except Exception as e:
             print(f"[ERROR] Exception while reading CSV: {e}")
 
+def extract_most_recent_anonymization_script_configuration(anon_json: list):
+    index = 0;
+    candidate_index = int(0)
+    first_result = anon_json[0]
+    candidate_version = int(first_result['version'])
+    for anon in anon_json:
+        this_version = int(anon['version'])
+        if (this_version >= candidate_version):
+            candidate_version = this_version
+            candidate_index = index
+        index += 1
+
+    selected_result = anon_json[candidate_index]
+    return selected_result
+
+def execute_update_anon_scripts_json(connection: XNATSession, args: argparse.Namespace) -> None:
+
+    if args.input_folder is None:
+        raise Exception("projects --update --anon requires --input_folder")
+
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except FileNotFoundError:
+            print(f"[ERROR] CSV file not found: {args.csv_file}")
+            return
+        except Exception as e:
+            print(f"[ERROR] Exception while reading CSV: {e}")
+            return
+    else:
+        try:
+            listing = listdir(args.input_folder)
+            for f in listing:
+                # File name should be something like Project_ID.anon.json
+                id = f.split('.')[0]
+                project_ids.append(id)
+        except Exception as e:
+            raise Exception(f"[ERROR] Exception while getting list of files in folder: {args.input_folder}\n{e}")
+
+    print(f"Length of project_ids {len(project_ids)}")
+
+    try:
+        http_headers = {}
+        http_headers['Content-Type'] = 'text/plain'
+#        http_headers['Content-Type'] = 'application/json'
+        project_count = len(project_ids)
+        project_index = 1
+        response = ""
+        for id in project_ids:
+            print(f"{project_index} / {project_count} / {id}.anon.json")
+            project_index += 1
+            if id.startswith("#"):
+                continue
+
+            upload_project_xml_template(connection, args, id)
+            file_path=f"{args.input_folder}/{id}.anon.json"
+            path_object = Path(file_path)
+            if (not path_object.is_file()):
+                continue
+            print(f"Upload anonymization from {file_path}")
+            anon_json = xnat_cli_scripts.cli_common.read_json_file(file_path)
+            current_anon_script = extract_most_recent_anonymization_script_configuration(anon_json['ResultSet']['Result'])
+            if (current_anon_script['status'] == "disabled"):
+                continue
+            anon_script_text = current_anon_script['contents']
+#            status = anon_json['ResultSet']['Result'][0]['status']
+#            if (status == "disabled"):
+#                continue
+
+#            anon_script = anon_json['ResultSet']['Result']
+            put_path = f"/data/projects/{id}/config/anon/{id}"
+            put_path = f"/xapi/anonymize/projects/{id}"
+
+#            response = connection.put(put_path, data=str(current_anon_script), headers=http_headers)
+#            response = connection.put(put_path, data=current_anon_script, headers=http_headers)
+            if args.verbose:
+                print(str(current_anon_script))
+            response = connection.put(put_path, data=anon_script_text, headers=http_headers)
+
+
+    except Exception as e:
+        print(f"[ERROR] Exception when uploading to {put_path}")
+        print(f"[ERROR] Exception while uploading anonymization script {file_path}\n{e}")
+
+
 
 def execute_list_project_accessibilities(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -718,6 +806,8 @@ def execute_remove_master(connection: XNATSession, args: argparse.Namespace) -> 
 def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.groups:
         execute_update_groups(connection, args)
+    elif args.anon:
+        execute_update_anon_scripts_json(connection, args)
     elif args.accessibilities:
         execute_update_accessibilities(connection, args)
     elif args.project_xml:
