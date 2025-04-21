@@ -4,6 +4,7 @@
 import argparse
 from typing import Union
 import json
+import sys
 
 # Common functions for CLI executables
 
@@ -44,3 +45,16 @@ def read_json_file(file_path: str):
         content = json.load(file)
         file.close()
         return content
+
+def apply_sleep(args: argparse.Namespace) -> None:
+    """ Applies sleep if -s is specified """
+    if args.sleep:
+        try:
+            sleep_time = float(args.sleep)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+        except ValueError:
+            print("[ERROR] Invalid sleep value. Please provide a valid number.")
+
+def print_stderr(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
