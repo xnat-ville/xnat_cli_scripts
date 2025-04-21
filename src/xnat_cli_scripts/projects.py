@@ -22,15 +22,10 @@ import json
 from pathlib import Path
 import os
 from os import listdir
-from os.path import isfile
-#import xnat
-#import xnat.core
 import xnat.mixin
 from requests import RequestException
 from xnat.session import XNATSession
-from xnat.exceptions import XNATResponseError
 import xnat_cli_scripts.cli_common
-
 
 def apply_sleep(args: argparse.Namespace) -> None:
     """ Applies sleep if -s is specified """
@@ -69,6 +64,26 @@ def format_project_data(project_json, project_object, args: argparse.Namespace) 
 
 def format_project_id_name(p) -> str:
     return f"{p.id}, {p.name}"
+
+
+def get_project_ids(connection: XNATSession, args: argparse.Namespace) -> []:
+    if args.csv_file:
+        # Read project IDs from CSV file
+        project_ids = []
+        with open(args.csv_file, mode='r') as file:
+            csv_reader = csv.reader(file, delimiter='\t')
+            for row in csv_reader:
+                if (not row[0].startswith("#")):
+                    project_ids.append(row[0])  # Assuming the project ID is in the first column
+            file.close()
+        return project_ids
+    else:
+        all_projects = connection.get_json(f"/data/projects")
+        project_list_json = all_projects['ResultSet']['Result']
+        project_ids = []
+        for project_json in project_list_json:
+            project_ids.append(project_json['ID'])
+        return project_ids
 
 
 def execute_list_projects(connection: XNATSession, args: argparse.Namespace) -> None:
@@ -797,6 +812,8 @@ def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> No
         execute_list_project_accessibilities(connection, args)
     elif args.configs:
         execute_list_project_configs(connection, args)
+    elif args.subjects and args.sessions:
+        execute_list_subjects_sessions(connection, args)
     else:
         execute_list_projects(connection, args)
 
@@ -1162,6 +1179,35 @@ def execute_session_list(connection: XNATSession, args: argparse.Namespace) -> N
             project_header = format_project_id_name(connection.projects[proj])
             for experiment in po.experiments.values():
                 print(f"{project_header} {format_session_data(experiment)}")
+
+def execute_list_subjects_sessions(connection: XNATSession, args: argparse.Namespace) -> None:
+    project_ids = get_project_ids(connection, args)
+    tab="\t"
+    project_index = 1
+    project_count = len(project_ids)
+    for id in project_ids:
+        po = connection.projects[id]
+        subject_count = len(po.subjects)
+        if args.verbose:
+            xnat_cli_scripts.cli_common.print_stderr(f"Project {id} / {project_index} / {project_count} Subjects: {subject_count}")
+
+        subject_index = 1
+        for subject in po.subjects.values():
+            if args.verbose:
+                xnat_cli_scripts.cli_common.print_stderr(f"{id}{tab}{subject.id}  {subject_index} / {subject_count}   {project_index} / {project_count}")
+            try:
+                for experiment in subject.experiments:
+#                    exp_path = f"/data/projects/{id}/subjects/{subject}/experiments/{experiment}"
+#                    exp_path = f"/data/experiments/{experiment}"
+#                    exp_json = connection.get_json(exp_path)
+#                    data_type=exp_json['items'][0]['meta']['xsi:type']
+                    print(f"{id}{tab}{subject.id}{tab}{experiment}")
+#                    print(f"{id}{tab}{subject.id}{tab}{experiment}{tab}{exp.__xsi_type__}")
+            except Exception as e:
+                xnat_cli_scripts.cli_common.print_stderr(f"[ERROR] Exception for project {id} subject {subject.id}: {e}")
+            subject_index += 1
+
+        project_index += 1
 
 
 if __name__ == "__main__":
