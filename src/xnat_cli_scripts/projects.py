@@ -423,20 +423,10 @@ def execute_update_groups(connection: XNATSession, args: argparse.Namespace) -> 
         except Exception as e:
             print(f"[ERROR] Exception while reading CSV: {e}")
 
-def extract_most_recent_anonymization_script_configuration(anon_json: list):
-    index = 0;
-    candidate_index = int(0)
-    first_result = anon_json[0]
-    candidate_version = int(first_result['version'])
-    for anon in anon_json:
-        this_version = int(anon['version'])
-        if (this_version >= candidate_version):
-            candidate_version = this_version
-            candidate_index = index
-        index += 1
-
-    selected_result = anon_json[candidate_index]
-    return selected_result
+def find_most_recent_version(json_list: list) -> dict:
+    if not json_list:
+        return None
+    return max(json_list, key=lambda item: int(item.get("version", 0)))
 
 def execute_update_anon_scripts_json(connection: XNATSession, args: argparse.Namespace) -> None:
 
@@ -487,7 +477,9 @@ def execute_update_anon_scripts_json(connection: XNATSession, args: argparse.Nam
                 continue
             print(f"Upload anonymization from {file_path}")
             anon_json = xnat_cli_scripts.cli_common.read_json_file(file_path)
-            current_anon_script = extract_most_recent_anonymization_script_configuration(anon_json['ResultSet']['Result'])
+            results = anon_json.get('ResultSet', {}).get('Result', [])
+            current_anon_script = find_most_recent_version(results)
+
             if (current_anon_script['status'] == "disabled"):
                 continue
             anon_script_text = current_anon_script['contents']
