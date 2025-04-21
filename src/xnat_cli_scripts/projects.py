@@ -430,6 +430,8 @@ def find_most_recent_version(json_list: list) -> dict:
 
 def execute_update_anon_scripts_json(connection: XNATSession, args: argparse.Namespace) -> None:
 
+    # This is a PUT command for migration. It is not for manual updating of json files.
+
     if args.input_folder is None:
         raise Exception("projects --update --anon requires --input_folder")
 
@@ -722,58 +724,55 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
 
 def execute_update_tracer_json(connection, args):
     """
-    Transfers tracer config from .tracer.json files by:
-    1. Extracting all 'contents' fields
-    2. Writing them to .tracer.txt in test_data/tracer_json/txt/
-    3. PUTting that text to the destination XNAT instance
+    This is a PUT command for migration. It is not for manual updating of json files.
+
+    Transfers the most recent tracer config (by version) from .tracer.json files
+    and PUTs that text to the destination XNAT instance.
     """
 
     if not args.input_folder:
         print("[ERROR] --input_folder is required.")
         return
 
-    # Set txt output folder path
-    txt_folder = Path("test_data/tracer_json/txt")
-    txt_folder.mkdir(parents=True, exist_ok=True)
+    # Get tracer JSON files from input folder
+    try:
+        listing = os.listdir(args.input_folder)
+        tracer_files = [f for f in listing if f.endswith(".tracer.json")]
+    except Exception as e:
+        print(f"[ERROR] Failed to list input folder: {e}")
+        return
 
-    # Read .tracer.json files
-    listing = os.listdir(args.input_folder)
-    tracer_files = [f for f in listing if f.endswith(".tracer.json")]
     if not tracer_files:
         print("[INFO] No .tracer.json files found.")
         return
 
     had_error = False
+    headers = {'Content-Type': 'text/plain'}
 
     for filename in tracer_files:
         project_id = Path(filename).with_suffix('').with_suffix('').name
-        full_json_path = Path(args.input_folder) / filename
-        txt_output_path = txt_folder / f"{project_id}.tracer.txt"
+        full_path = Path(args.input_folder) / filename
 
         try:
-            with open(full_json_path, "r", encoding="utf-8") as f:
-                content = json.load(f)
+            with open(full_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-            results = content.get("ResultSet", {}).get("Result", [])
-            tracer_lines = [entry.get("contents", "").strip() for entry in results if entry.get("contents", "").strip()]
+            results = data.get("ResultSet", {}).get("Result", [])
+            latest_entry = find_most_recent_version(results)
 
-            if not tracer_lines:
-                print(f"[WARNING] No valid contents found in {filename}")
+            if not latest_entry:
+                print(f"[WARNING] No valid tracer config found in {filename}")
                 had_error = True
                 continue
 
-            # Write the .tracer.txt file to the correct path
-            with open(txt_output_path, "w", encoding="utf-8") as f_out:
-                for line in tracer_lines:
-                    f_out.write(line + "\n")
+            tracer_text = latest_entry.get("contents", "").strip()
+            if not tracer_text:
+                print(f"[WARNING] Most recent tracer version for {project_id} has no contents.")
+                had_error = True
+                continue
 
-            # PUT request
             put_url = f"/data/projects/{project_id}/config/tracers/tracers"
-            with open(txt_output_path, "r", encoding="utf-8") as f_txt:
-                txt_data = f_txt.read()
-
-            headers = {'Content-Type': 'text/plain'}
-            response = connection.put(put_url, data=txt_data, headers=headers)
+            response = connection.put(put_url, data=tracer_text, headers=headers)
 
             if response.status_code not in [200, 201]:
                 print(f"[ERROR] PUT failed for {project_id}: {response.status_code} {response.text}")
@@ -784,9 +783,10 @@ def execute_update_tracer_json(connection, args):
             had_error = True
 
     if had_error:
-        print("[ERROR] Tracer processing finished with some errors.")
+        print("[ERROR] Tracer update completed with some errors.")
     else:
         print("[INFO] All tracers have been updated successfully.")
+
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
     
