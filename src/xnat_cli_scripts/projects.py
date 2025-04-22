@@ -504,6 +504,37 @@ def execute_update_anon_scripts_json(connection: XNATSession, args: argparse.Nam
         print(f"[ERROR] Exception when uploading to {put_path}")
         print(f"[ERROR] Exception while uploading anonymization script {file_path}\n{e}")
 
+def execute_update_prearchive_code(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates the prearchive code for each project using values from a CSV file.
+    CSV Format: {project_id}\t{prearchive_code}
+    """
+    if not args.csv_file:
+        print("[ERROR] --csv is required for --update --prearchive_code")
+        return
+
+    try:
+        with open(args.csv_file, mode='r') as file:
+            csv_reader = csv.reader(file, delimiter='\t')
+            for row in csv_reader:
+                if len(row) < 2:
+                    print(f"[WARNING] Skipping invalid row: {row}")
+                    continue
+
+                project_id = row[0].strip()
+                new_code = row[1].strip()
+
+                url = f"/data/projects/{project_id}/prearchive_code/{new_code}"
+                response = connection.put(url)
+
+                apply_sleep(args)
+
+                if response.status_code == 200:
+                    print(f"{project_id}\t{new_code}\tUPDATED")
+                else:
+                    print(f"{project_id}\t{new_code}\tERROR\t{response.status_code}: {response.text}")
+    except Exception as e:
+        print(f"[ERROR] Failed to process CSV file: {e}")
 
 
 def execute_list_project_accessibilities(connection: XNATSession, args: argparse.Namespace) -> None:
@@ -827,6 +858,8 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
             print("[WARNING] No input folder provided for project XML update.")
     elif args.tracer_json:
         execute_update_tracer_json(connection, args)
+    elif args.prearchive_code:
+        execute_update_prearchive_code(connection, args)
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
