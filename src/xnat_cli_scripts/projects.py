@@ -818,6 +818,126 @@ def execute_update_tracer_json(connection, args):
     else:
         print("[INFO] All tracers have been updated successfully.")
 
+def execute_update_series_import_filter(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates series import filter configuration for projects using versioned .seriesImportFilter.json files.
+    Finds the most recent version and PUTs both the contents and the status (enabled/disabled).
+    """
+    if not args.input_folder:
+        print("[ERROR] --input_folder is required for --update --seriesImportFilter")
+        return
+
+    try:
+        files = [f for f in os.listdir(args.input_folder) if f.endswith(".seriesImportFilter.json")]
+    except Exception as e:
+        print(f"[ERROR] Failed to read input folder: {e}")
+        return
+
+    if not files:
+        print("[INFO] No .seriesImportFilter.json files found.")
+        return
+
+    for filename in files:
+        project_id = Path(filename).with_suffix('').with_suffix('').name
+        full_path = Path(args.input_folder) / filename
+
+        try:
+            with open(full_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            results = data.get("ResultSet", {}).get("Result", [])
+            latest = find_most_recent_version(results)
+
+            if not latest:
+                print(f"[WARNING] No valid version found in {filename}")
+                continue
+
+            contents = latest.get("contents", "").strip()
+            status = latest.get("status", "").strip().lower()
+
+            if not contents:
+                print(f"[WARNING] Skipping {project_id} due to empty contents.")
+                continue
+
+            put_url = f"/data/projects/{project_id}/config/seriesImportFilter"
+            headers = {'Content-Type': 'text/plain'}
+
+            # PUT contents (safe block)
+            try:
+                response1 = connection.put(put_url, data=contents, headers=headers)
+                print(f"[INFO] PUT (contents) successful for {project_id}")
+            except Exception as e:
+                print(f"[ERROR] PUT (contents) failed for {project_id}: {e}")
+                continue
+
+            # PUT status (safe block)
+            if status in ["enabled", "disabled"]:
+                status_url = f"{put_url}/status/{status}"
+                try:
+                    response2 = connection.put(status_url)
+                    print(f"[INFO] PUT (status: {status}) successful for {project_id}")
+                except Exception as e:
+                    print(f"[ERROR] PUT (status) failed for {project_id}: {e}")
+            else:
+                print(f"[WARNING] Skipping status update for {project_id} due to invalid status: '{status}'")
+
+        except Exception as e:
+            print(f"[ERROR] Failed to process {filename}: {e}")
+
+
+def execute_update_series_import_filter(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Migrates Series Import Filter config to destination XNAT without changing versioning or status.
+    PUTs only the 'contents' from the latest version to the regular config endpoint.
+    """
+
+    if not args.input_folder:
+        print("[ERROR] --input_folder is required for --update --seriesImportFilter")
+        return
+
+    try:
+        files = [f for f in os.listdir(args.input_folder) if f.endswith(".seriesImportFilter.json")]
+    except Exception as e:
+        print(f"[ERROR] Failed to read input folder: {e}")
+        return
+
+    if not files:
+        print("[INFO] No .seriesImportFilter.json files found.")
+        return
+
+    for filename in files:
+        project_id = Path(filename).with_suffix('').with_suffix('').name
+        full_path = Path(args.input_folder) / filename
+
+        try:
+            with open(full_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            results = data.get("ResultSet", {}).get("Result", [])
+            latest = find_most_recent_version(results)
+
+            if not latest:
+                print(f"[WARNING] No valid version found in {filename}")
+                continue
+
+            contents = latest.get("contents", "").strip()
+            if not contents:
+                print(f"[WARNING] Skipping {project_id} due to empty contents.")
+                continue
+
+            put_url = f"/data/projects/{project_id}/config/seriesImportFilter"
+            headers = {'Content-Type': 'text/plain'}
+
+            response = connection.put(put_url, data=contents, headers=headers)
+
+            if response.status_code in [200, 201]:
+                print(f"[INFO] Copied series import filter for {project_id}")
+            else:
+                print(f"[ERROR] PUT failed for {project_id}: {response.status_code} {response.text}")
+
+        except Exception as e:
+            print(f"[ERROR] Failed to process {filename}: {e}")
+
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
     
@@ -860,6 +980,8 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         execute_update_tracer_json(connection, args)
     elif args.prearchive_code:
         execute_update_prearchive_code(connection, args)
+    elif args.seriesImportFilter:
+        execute_update_series_import_filter(connection, args)
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
