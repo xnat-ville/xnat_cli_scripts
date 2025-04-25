@@ -1338,8 +1338,54 @@ def execute_get_container_service(connection: XNATSession, args: argparse.Namesp
 
         print("[INFO] Service container JSON retrieval complete")
 
+def execute_get_session_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves session JSONs based on a list of ProjectID, SubjectID, SessionID from a CSV/TXT file.
+    Saves each session JSON to test_data/session_json/{SessionID}.json
+    """
+    if not args.csv_file:
+        print("[ERROR] --csv is required to get session JSONs.")
+        return
 
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
 
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    try:
+        with open(args.csv_file, mode='r') as file:
+            csv_reader = csv.reader(file, delimiter='\t')
+            session_entries = [row for row in csv_reader if row]
+    except Exception as e:
+        print(f"[ERROR] Failed to read CSV: {e}")
+        return
+
+    for row in session_entries:
+        if len(row) < 3:
+            continue  # skip invalid rows
+
+        project_id, subject_id, session_id = row[0], row[1], row[2]
+
+        try:
+            response = connection.get(f"/data/experiments/{session_id}?format=json")
+            response.raise_for_status()
+
+            session_json = response.json()
+            output_file = Path(args.output_folder) / f"{session_id}.json"
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(session_json, f, indent=4)
+
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                pass  # skip missing sessions silently
+            else:
+                xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: Failed to retrieve session {session_id}: {e}")
+        except Exception as e:
+            xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: Unexpected error for session {session_id}: {e}")
+
+    print("[INFO] Session JSON retrieval completed successfully.")
+      
 
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.subjects:
@@ -1372,6 +1418,10 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
 
     if args.container_service:
         execute_get_container_service(connection, args)
+        return
+
+    if args.session_json:
+        execute_get_session_json(connection, args)
         return
 
     print("[ERROR] No valid 'GET' action specified.")
@@ -1486,6 +1536,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--configs',         dest='configs',                  help="Specify configs for list/get",               action='store_true')
     parser.add_argument(      '--resource_config', dest='resource_config',          help="Retrieve resource_config for projects",      action='store_true')
     parser.add_argument(      '--container_service',dest='container_service',       help="Retrieve container_service for projects",    action='store_true')
+    parser.add_argument(       '--session_json',   dest='session_json',             help="Retrieve session JSONs by session ID",       action='store_true')        
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
