@@ -68,23 +68,13 @@ def format_project_id_name(p) -> str:
 
 def get_project_ids(connection: XNATSession, args: argparse.Namespace) -> []:
     if args.csv_file:
-        # Read project IDs from CSV file
-        project_ids = []
         with open(args.csv_file, mode='r') as file:
-            csv_reader = csv.reader(file, delimiter='\t')
-            for row in csv_reader:
-                if (not row[0].startswith("#")):
-                    project_ids.append(row[0])  # Assuming the project ID is in the first column
-            file.close()
-        return project_ids
+            project_ids = [row.strip() for row in file.readlines() if row.strip()]
+            return project_ids
     else:
-        all_projects = connection.get_json(f"/data/projects")
-        project_list_json = all_projects['ResultSet']['Result']
-        project_ids = []
-        for project_json in project_list_json:
-            project_ids.append(project_json['ID'])
+        all_projects = connection.get_json("/data/projects")
+        project_ids = [p['ID'] for p in all_projects['ResultSet']['Result']]
         return project_ids
-
 
 def execute_list_projects(connection: XNATSession, args: argparse.Namespace) -> None:
     
@@ -293,29 +283,7 @@ def execute_list_prearchive_code(connection: XNATSession, args: argparse.Namespa
     Printed to stdout. Shell script should redirect output.
     """
 
-    project_ids = []
-
-    # Load project IDs from CSV if provided
-    if args.csv_file:
-        try:
-            with open(args.csv_file, mode='r') as file:
-                csv_reader = csv.reader(file, delimiter='\t')
-                project_ids = [row[0].strip() for row in csv_reader if row]
-        except FileNotFoundError:
-            print(f"[ERROR] CSV file not found: {args.csv_file}")
-            return
-        except Exception as e:
-            print(f"[ERROR] Error reading CSV file: {e}")
-            return
-
-    # If no CSV, fetch all project IDs
-    if not project_ids:
-        all_projects = connection.get_json("/data/projects")
-        if 'ResultSet' in all_projects and 'Result' in all_projects['ResultSet']:
-            project_ids = [proj['ID'] for proj in all_projects['ResultSet']['Result']]
-        else:
-            print("[ERROR] Failed to retrieve projects.")
-            return
+    project_ids = get_project_ids(connection, args)
 
     for project_id in project_ids:
         try:
@@ -1027,13 +995,7 @@ def execute_get_series_import_filter_json(connection: XNATSession, args: argpars
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
     output_folder = args.output_folder
 
-    project_ids = []
-    if args.csv_file:
-        with open(args.csv_file, mode='r') as file:
-            project_ids = [row.strip() for row in file.readlines() if row.strip()]
-    else:
-        all_projects = connection.get_json("/data/projects")
-        project_ids = [p['ID'] for p in all_projects['ResultSet']['Result']]
+    project_ids = get_project_ids(connection, args)
 
     for project_id in project_ids:
         sif_url = f"/data/projects/{project_id}/config/seriesImportFilter"
@@ -1160,22 +1122,7 @@ def execute_get_tracer_json(connection: XNATSession, args: argparse.Namespace) -
 
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
-    project_ids = []
-
-    if args.csv_file:
-        try:
-            with open(args.csv_file, mode='r') as file:
-                project_ids = [line.strip() for line in file if line.strip()]
-        except Exception as e:
-            print(f"[ERROR] Failed to read CSV file: {e}")
-            return
-    else:
-        try:
-            response = connection.get_json("/data/projects")
-            project_ids = [project['ID'] for project in response if 'ID' in project]
-        except Exception as e:
-            print(f"[ERROR] Failed to retrieve project list: {e}")
-            return
+    project_ids = get_project_ids(connection, args)
 
     for project_id in project_ids:
         try:
