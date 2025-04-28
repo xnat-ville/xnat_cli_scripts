@@ -1151,26 +1151,18 @@ def execute_get_subject_json(connection: XNATSession, args: argparse.Namespace) 
         print("[ERROR] --output_folder is required.")
         return
 
-    # Load project IDs from CSV if provided, otherwise get all from XNAT
-    project_ids = []
+    project_ids = get_project_ids(connection, args)
 
-    if args.csv_file:
-        try:
-            with open(args.csv_file, mode='r') as file:
-                csv_reader = csv.reader(file, delimiter='\t')
-                project_ids = [row[0].strip() for row in csv_reader if row]
-        except Exception as e:
-            print(f"[ERROR] Failed to read CSV file: {e}")
-            return
-    else:
-        try:
-            all_projects = connection.get_json("/data/projects")
-            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
-        except Exception as e:
-            print(f"[ERROR] Failed to fetch project list: {e}")
-            return
+    project_count = len(project_ids)
+    project_index = 1
 
     for project_id in project_ids:
+        if args.verbose:
+            subject_count = 0
+            subject_index = 0
+
+            xnat_cli_scripts.cli_common.print_stderr(f"Project {project_id} / {project_index} / {project_count}   NA {subject_index} / {subject_count}")
+
         project_folder = Path(args.output_folder) / project_id
         project_folder.mkdir(parents=True, exist_ok=True)
 
@@ -1181,8 +1173,14 @@ def execute_get_subject_json(connection: XNATSession, args: argparse.Namespace) 
             print(f"[ERROR] Failed to fetch subjects for {project_id}: {e}")
             continue  # Move on to the next project
 
+        subject_count = len(subjects)
+        subject_index = 1
         for subject in subjects:
             subject_id = subject.get('ID')
+            if args.verbose:
+                xnat_cli_scripts.cli_common.print_stderr(f"Project {project_id} / {project_index} / {project_count}   {subject_id} {subject_index} / {subject_count}")
+                subject_index += 1
+
             if not subject_id or 'label' not in subject:
                 continue  # Skip malformed entries
 
@@ -1196,6 +1194,8 @@ def execute_get_subject_json(connection: XNATSession, args: argparse.Namespace) 
 
             except Exception as e:
                 print(f"[ERROR] Failed to fetch/save subject {subject_id} in project {project_id}: {e}")
+
+        project_index += 1
 
     print("[INFO] Subject JSON retrieval completed successfully.")
 
