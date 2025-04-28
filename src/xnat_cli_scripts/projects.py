@@ -68,8 +68,13 @@ def format_project_id_name(p) -> str:
 
 def get_project_ids(connection: XNATSession, args: argparse.Namespace) -> []:
     if args.csv_file:
+        project_ids = []
         with open(args.csv_file, mode='r') as file:
-            project_ids = [row.strip() for row in file.readlines() if row.strip()]
+            csv_reader = csv.reader(file, delimiter='\t')
+            for row in csv_reader:
+                if (not row[0].startswith("#")):
+                    project_ids.append(row[0])  # Assuming the project ID is in the first column
+            file.close()
             return project_ids
     else:
         all_projects = connection.get_json("/data/projects")
