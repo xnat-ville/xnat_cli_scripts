@@ -81,6 +81,39 @@ def get_project_ids(connection: XNATSession, args: argparse.Namespace) -> []:
         project_ids = [p['ID'] for p in all_projects['ResultSet']['Result']]
         return project_ids
 
+
+def get_project_subject_ids(connection: XNATSession, args: argparse.Namespace) -> []:
+    if (args.csv_file and args.csv_projects_subjects_file):
+        raise Exception ("The variables ags.csv_file and args.csv_projects_subjects_file cannot both be populated")
+
+    if args.csv_projects_subjects_file:
+        project_subject_ids = []
+        with open(args.csv_projects_subjects_file, mode='r') as file:
+            csv_reader = csv.reader(file, delimiter='\t')
+            for row in csv_reader:
+                if (not row[0].startswith("#")):
+                    project_subject_ids.append(row)  # Assuming the project ID is in the first column
+            file.close()
+        return project_subject_ids
+
+    project_subject_ids = []
+    project_ids = get_project_ids(connection, args)
+    project_count = len(project_ids)
+    project_index = 1
+    tab="\t"
+    for project_id in project_ids:
+        if args.verbose:
+            xnat_cli_scripts.cli_common.print_stderr(f"{project_id}{tab}{project_index} / {project_count}")
+
+        subject_ids = execute_get_subjects_list(connection, project_id)
+        for subject_id in subject_ids:
+            row = []
+            row.append(project_id)
+            row.append(subject_id)
+            project_subject_ids.append(row)
+        project_index += 1
+    return project_subject_ids
+
 def execute_list_projects(connection: XNATSession, args: argparse.Namespace) -> None:
     
     if args.csv_file:
@@ -1145,59 +1178,131 @@ def execute_get_tracer_json(connection: XNATSession, args: argparse.Namespace) -
 
     print("[INFO] Raw Tracer JSON retrieval complete.")
 
+def count_unique_projects(project_subject_ids: []) -> int:
+    project_set = set()
+    for row in project_subject_ids:
+        project_set.add(row[0])
+
+    return len(project_set)
+
 def execute_get_subject_json(connection: XNATSession, args: argparse.Namespace) -> None:
     # Check if output folder is provided
     if not args.output_folder:
         print("[ERROR] --output_folder is required.")
         return
 
-    project_ids = get_project_ids(connection, args)
+    project_subject_ids = get_project_subject_ids(connection, args)
+    subject_count = len(project_subject_ids)
+    project_count = count_unique_projects(project_subject_ids)
+    print(f"Project count: {project_count}")
+    print(f"Subject count: {subject_count}")
 
-    project_count = len(project_ids)
-    project_index = 1
+    last_project = ""
+    project_index = 0
+    subject_index = 1
+    for row in project_subject_ids:
+        project_id = row[0]
+        subject_id = row[1]
+        if (project_id != last_project):
+            last_project = project_id
+            project_index += 1
+        print(f"{project_index} / {project_count}  {subject_index} / {subject_count}  {project_id}/{subject_id}")
+        subject_index += 1
 
-    for project_id in project_ids:
-        if args.verbose:
-            subject_count = 0
-            subject_index = 0
-
-            xnat_cli_scripts.cli_common.print_stderr(f"Project {project_id} / {project_index} / {project_count}   NA {subject_index} / {subject_count}")
-
+    print("[INFO] Subject JSON retrieval completed successfully.")
+'''
         project_folder = Path(args.output_folder) / project_id
         project_folder.mkdir(parents=True, exist_ok=True)
 
-        try:
-            subject_list = connection.get_json(f"/data/projects/{project_id}/subjects")
-            subjects = subject_list.get('ResultSet', {}).get('Result', [])
-        except Exception as e:
-            print(f"[ERROR] Failed to fetch subjects for {project_id}: {e}")
-            continue  # Move on to the next project
-
-        subject_count = len(subjects)
-        subject_index = 1
-        for subject in subjects:
-            subject_id = subject.get('ID')
-            if args.verbose:
-                xnat_cli_scripts.cli_common.print_stderr(f"Project {project_id} / {project_index} / {project_count}   {subject_id} {subject_index} / {subject_count}")
-                subject_index += 1
-
-            if not subject_id or 'label' not in subject:
-                continue  # Skip malformed entries
-
+        subject_file = project_folder / f"{subject_id}.subject.json"
+        #print(subject_file)
+        time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if (subject_file.exists()):
+            print(f"{time_stamp}    Subject file exists {subject_file}")
+        else:
+            print(f"{time_stamp}    Need to retrieve subject json {project_id}/{subject_id}")
             try:
                 response = connection.get(f"/data/subjects/{subject_id}", format="json", timeout=300)
                 subject_json = response.json()
 
-                output_file = project_folder / f"{subject_id}.subject.json"
-                with open(output_file, "w", encoding="utf-8") as f:
+                with open(subject_file, "w", encoding="utf-8") as f:
                     json.dump(subject_json, f, indent=4)
+                    f.close()
 
             except Exception as e:
                 print(f"[ERROR] Failed to fetch/save subject {subject_id} in project {project_id}: {e}")
+'''
+#    project_ids = get_project_ids(connection, args)
+#
+#    project_count = len(project_ids)
+#    project_index = 1
+#
+#    for project_id in project_ids:
+#        if args.verbose:
+#            subject_count = 0
+#            subject_index = 0
+#
+#            xnat_cli_scripts.cli_common.print_stderr(f"Project {project_id} / {project_index} / {project_count}   NA {subject_index} / {subject_count}")
+#
+#        project_folder = Path(args.output_folder) / project_id
+#        project_folder.mkdir(parents=True, exist_ok=True)
+#
+#        try:
+#            subject_list = connection.get_json(f"/data/projects/{project_id}/subjects")
+#            subjects = subject_list.get('ResultSet', {}).get('Result', [])
+#        except Exception as e:
+#            print(f"[ERROR] Failed to fetch subjects for {project_id}: {e}")
+#            continue  # Move on to the next project
+#
+#        subject_count = len(subjects)
+#        subject_index = 1
+#        for subject in subjects:
+#            subject_id = subject.get('ID')
+#            if args.verbose:
+#                xnat_cli_scripts.cli_common.print_stderr(f"Project {project_id} / {project_index} / {project_count}   {subject_id} {subject_index} / {subject_count}")
+#                subject_index += 1
+#
+#            if not subject_id or 'label' not in subject:
+#                continue  # Skip malformed entries
+#
+#            try:
+#                response = connection.get(f"/data/subjects/{subject_id}", format="json", timeout=300)
+#                subject_json = response.json()
+#
+#                output_file = project_folder / f"{subject_id}.subject.json"
+#                with open(output_file, "w", encoding="utf-8") as f:
+#                    json.dump(subject_json, f, indent=4)
+#
+#            except Exception as e:
+#                print(f"[ERROR] Failed to fetch/save subject {subject_id} in project {project_id}: {e}")
+#
+#        project_index += 1
+#
 
+# This ver
+def execute_get_subject_demographics_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    # Check if output folder is provided
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
+
+    demographics_folder = Path(args.output_folder)
+    demographics_folder.mkdir(parents=True, exist_ok=True)
+    query_dictionary={"columns": "label,project,gender,handedness,education,race,ethnicity,group,yob,dob,age,height,weight,src"}
+
+    project_ids = get_project_ids(connection, args)
+    project_count = len(project_ids)
+    project_index = 1
+    for project_id in project_ids:
+        print(f"{project_index} / {project_count}   {project_id} ")
         project_index += 1
 
-    print("[INFO] Subject JSON retrieval completed successfully.")
+        subjects_json=connection.get_json(f"/data/projects/{project_id}/subjects", query=query_dictionary)
+        subjects_file = demographics_folder/f"{project_id}.subjects.json"
+        with open(subjects_file, "w", encoding="utf-8") as f:
+            json.dump(subjects_json, f, indent=4)
+            f.close()
+
 
 def execute_get_resource_config(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -1340,6 +1445,10 @@ def execute_get_session_json(connection: XNATSession, args: argparse.Namespace) 
       
 
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
+    if args.subjects_demographics_json:
+        execute_get_subject_demographics_json(connection, args)
+        return
+
     if args.subjects:
         execute_get_subject_json(connection, args)
         return
@@ -1459,6 +1568,13 @@ def execute_list_subjects_sessions(connection: XNATSession, args: argparse.Names
 
         project_index += 1
 
+def execute_get_subjects_list(connection: XNATSession, project_id: str) -> [] :
+    subjects_list = []
+    project_object = connection.projects[project_id]
+    for subject in project_object.subjects.values():
+        subjects_list.append(subject.id)
+
+    return subjects_list
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="List projects from an XNAT system")
@@ -1476,7 +1592,8 @@ if __name__ == "__main__":
     # These are objects of the operations; 
     parser.add_argument('-u', '--users',           dest='users',                    help='Listing Verb object: Users',                 action='store_true')
     parser.add_argument('-g', '--groups',          dest='groups',                   help='Object: Groups (for both LIST and REMOVE)',  action='store_true')
-    parser.add_argument(      '--subjects',        dest='subjects',                 help='Include list of subjects in output',         action='store_true')                   
+    parser.add_argument(      '--subjects',        dest='subjects',                 help='Include list of subjects in output',         action='store_true')
+    parser.add_argument(   '--subjects_demographics_json', dest='subjects_demographics_json',  help='Operation includes subject JSON',            action='store_true')
     parser.add_argument(    '--seriesImportFilter',dest='seriesImportFilter',       help="Extract series import filter for projects",  action='store_true')
     parser.add_argument(      '--accessibilities', dest='accessibilities',          help="Accessibilities for projects",               action='store_true')
     parser.add_argument(      '--sessions',        dest='sessions',                 help="Include list of sessions in output",         action='store_true')
@@ -1495,6 +1612,7 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--sleep',           dest='sleep',                    help="Time to sleep after each REST call")
     parser.add_argument('-v', '--verbose',         dest='verbose',                  help="Verbose mode",                               action='store_true')
     parser.add_argument(      '--csv',             dest='csv_file',                 help='Path to CSV file operations such as listing, removing, or changing groups')
+    parser.add_argument(  '--csv_projects_subjects', dest='csv_projects_subjects_file',  help="Path to CSV with project/subject ID tuplets")
     parser.add_argument(      '--input_folder',    dest='input_folder',             help='Path to input folder of files')
     parser.add_argument(      '--output_folder',   dest='output_folder',            help='Path to output folder')
     parser.add_argument(      '--template',        dest='template',                 help='Path to a template file')
