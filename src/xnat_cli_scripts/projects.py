@@ -826,73 +826,6 @@ def execute_update_tracer_json(connection, args):
 
 def execute_update_series_import_filter(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Updates series import filter configuration for projects using versioned .seriesImportFilter.json files.
-    Finds the most recent version and PUTs both the contents and the status (enabled/disabled).
-    """
-    if not args.input_folder:
-        print("[ERROR] --input_folder is required for --update --seriesImportFilter")
-        return
-
-    try:
-        files = [f for f in os.listdir(args.input_folder) if f.endswith(".seriesImportFilter.json")]
-    except Exception as e:
-        print(f"[ERROR] Failed to read input folder: {e}")
-        return
-
-    if not files:
-        print("[INFO] No .seriesImportFilter.json files found.")
-        return
-
-    for filename in files:
-        project_id = Path(filename).with_suffix('').with_suffix('').name
-        full_path = Path(args.input_folder) / filename
-
-        try:
-            with open(full_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            results = data.get("ResultSet", {}).get("Result", [])
-            latest = find_most_recent_version(results)
-
-            if not latest:
-                print(f"[WARNING] No valid version found in {filename}")
-                continue
-
-            contents = latest.get("contents", "").strip()
-            status = latest.get("status", "").strip().lower()
-
-            if not contents:
-                print(f"[WARNING] Skipping {project_id} due to empty contents.")
-                continue
-
-            put_url = f"/data/projects/{project_id}/config/seriesImportFilter"
-            headers = {'Content-Type': 'text/plain'}
-
-            # PUT contents (safe block)
-            try:
-                response1 = connection.put(put_url, data=contents, headers=headers)
-                print(f"[INFO] PUT (contents) successful for {project_id}")
-            except Exception as e:
-                print(f"[ERROR] PUT (contents) failed for {project_id}: {e}")
-                continue
-
-            # PUT status (safe block)
-            if status in ["enabled", "disabled"]:
-                status_url = f"{put_url}/status/{status}"
-                try:
-                    response2 = connection.put(status_url)
-                    print(f"[INFO] PUT (status: {status}) successful for {project_id}")
-                except Exception as e:
-                    print(f"[ERROR] PUT (status) failed for {project_id}: {e}")
-            else:
-                print(f"[WARNING] Skipping status update for {project_id} due to invalid status: '{status}'")
-
-        except Exception as e:
-            print(f"[ERROR] Failed to process {filename}: {e}")
-
-
-def execute_update_series_import_filter(connection: XNATSession, args: argparse.Namespace) -> None:
-    """
     Migrates Series Import Filter config to destination XNAT without changing versioning or status.
     PUTs only the 'contents' from the latest version to the regular config endpoint.
     """
@@ -944,6 +877,89 @@ def execute_update_series_import_filter(connection: XNATSession, args: argparse.
         except Exception as e:
             print(f"[ERROR] Failed to process {filename}: {e}")
 
+def execute_update_subjects_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Creates subjects in XNAT from demographics JSON files using PUT to 
+    /data/projects/{project}/subjects/{label}. One subject at a time.
+    
+    Input: Folder of .subjects.json files (per project).
+    Optional: --csv_projects_subjects to limit updates to a subset.
+    """
+
+    if not args.input_folder:
+        print("[ERROR] --input_folder is required for --update --subjects")
+        return
+
+    try:
+        files = [f for f in os.listdir(args.input_folder) if f.endswith(".subjects.json")]
+    except Exception as e:
+        print(f"[ERROR] Failed to read input folder: {e}")
+        return
+
+    if not files:
+        print("[INFO] No .subjects.json files found.")
+        return
+
+    # Optional project-subject filter
+    valid_subjects = None
+    if args.csv_projects_subjects_file:
+        try:
+            valid_subjects = set()
+            with open(args.csv_projects_subjects_file, mode='r') as file:
+                reader = csv.reader(file, delimiter='\t')
+                for row in reader:
+                    if len(row) >= 2:
+                        valid_subjects.add((row[0].strip(), row[1].strip()))
+        except Exception as e:
+            print(f"[ERROR] Failed to load subject filter CSV: {e}")
+            return
+
+    headers = {'Content-Type': 'application/json'}
+
+    for file in files:
+        project_id = Path(file).with_suffix('').with_suffix('').name
+        file_path = Path(args.input_folder) / file
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                full_data = json.load(f)
+        except Exception as e:
+            print(f"[ERROR] Failed to parse JSON in {file_path}: {e}")
+            continue
+
+        subjects = full_data.get("ResultSet", {}).get("Result", [])
+        if not subjects:
+            continue
+
+        for subj in subjects:
+            label = subj.get("label")
+            project = subj.get("project")
+            if not label or not project:
+                print(f"[WARNING] Skipping subject missing label/project in {file}")
+                continue
+
+            if valid_subjects and (project, subj.get("ID")) not in valid_subjects:
+                continue
+
+            payload = {
+                "label": label,
+                "project": project
+            }
+
+            try:
+                url = f"/data/projects/{project}/subjects/{label}"
+                response = connection.put(url, data=json.dumps(payload), headers=headers)
+
+                if response.status_code in [200, 201]:
+                    print(f"{project}/{label} CREATED")
+                elif response.status_code == 409:
+                    print(f"{project}/{label} ALREADY EXISTS (conflict)")
+                else:
+                    print(f"[ERROR] PUT failed for {project}/{label}: {response.status_code} {response.text}")
+            except Exception as e:
+                print(f"[ERROR] Failed to PUT subject {label} to {project}: {e}")
+
+    print("[INFO] Subject creation complete.")
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
     
@@ -988,6 +1004,8 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         execute_update_prearchive_code(connection, args)
     elif args.seriesImportFilter:
         execute_update_series_import_filter(connection, args)
+    elif args.subjects:
+        execute_update_subjects_json(connection, args)
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
