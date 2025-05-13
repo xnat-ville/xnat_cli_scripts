@@ -879,12 +879,13 @@ def execute_update_series_import_filter(connection: XNATSession, args: argparse.
 
 def execute_update_subjects_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Creates subjects in XNAT from demographics JSON files using PUT to 
-    /data/projects/{project}/subjects/{label}. One subject at a time.
-    
-    Input: Folder of .subjects.json files (per project).
-    Optional: --csv_projects_subjects to limit updates to a subset.
+    THIS USES XML FORMAT TO UPDATE NOW.
+
+    Creates subjects in XNAT from demographics JSON files.
+    Sends all non-empty fields using XNAT's XML format, embedding demographics in a nested element.
     """
+
+    import xml.etree.ElementTree as ET
 
     if not args.input_folder:
         print("[ERROR] --input_folder is required for --update --subjects")
@@ -914,7 +915,7 @@ def execute_update_subjects_json(connection: XNATSession, args: argparse.Namespa
             print(f"[ERROR] Failed to load subject filter CSV: {e}")
             return
 
-    headers = {'Content-Type': 'application/json'}
+    headers = {'Content-Type': 'application/xml'}
 
     for file in files:
         project_id = Path(file).with_suffix('').with_suffix('').name
@@ -941,14 +942,26 @@ def execute_update_subjects_json(connection: XNATSession, args: argparse.Namespa
             if valid_subjects and (project, subj.get("ID")) not in valid_subjects:
                 continue
 
-            payload = {
-                "label": label,
-                "project": project
-            }
+            # Create XML payload with demographics nesting
+            subject_elem = ET.Element("xnat:Subject")
+            subject_elem.set("xmlns:xnat", "http://nrg.wustl.edu/xnat")
+            subject_elem.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
+            subject_elem.set("project", project)
+            subject_elem.set("label", label)
+
+            demographics_elem = ET.SubElement(subject_elem, "xnat:demographics")
+            demographics_elem.set("xsi:type", "xnat:demographicData")
+
+            for key, value in subj.items():
+                if value not in ("", None) and key not in ("label", "project", "URI", "ID"):
+                    child = ET.SubElement(demographics_elem, f"xnat:{key}")
+                    child.text = str(value)
+
+            payload = ET.tostring(subject_elem, encoding="utf-8").decode("utf-8")
 
             try:
                 url = f"/data/projects/{project}/subjects/{label}"
-                response = connection.put(url, data=json.dumps(payload), headers=headers)
+                response = connection.put(url, data=payload, headers=headers)
 
                 if response.status_code in [200, 201]:
                     print(f"{project}/{label} CREATED")
@@ -960,6 +973,7 @@ def execute_update_subjects_json(connection: XNATSession, args: argparse.Namespa
                 print(f"[ERROR] Failed to PUT subject {label} to {project}: {e}")
 
     print("[INFO] Subject creation complete.")
+
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
     
