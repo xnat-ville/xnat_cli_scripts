@@ -1333,11 +1333,11 @@ def execute_get_project_xml(connection: XNATSession, args: argparse.Namespace) -
 
 def execute_get_subject_demographics_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Retrieves only <xnat:demographics> XML elements for each subject and writes one file per project.
-    Output filename: <projectID>_subjects.xml
+    Retrieves subject demographics as XML using the bulk subjects endpoint and writes one XML file per project.
+    Output filename: <projectID>.subjects.xml
     """
 
-    import xml.etree.ElementTree as ET
+    import xml.dom.minidom
 
     if not args.output_folder:
         print("[ERROR] --output_folder is required.")
@@ -1345,35 +1345,29 @@ def execute_get_subject_demographics_xml(connection: XNATSession, args: argparse
 
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
-    project_subject_ids = get_project_subject_ids(connection, args)
+    query_dictionary = {
+        "columns": "label,project,gender,handedness,education,race,ethnicity,group,yob,dob,age,height,weight,src",
+        "format": "xml"
+    }
 
-    # Group subjects by project
-    from collections import defaultdict
-    project_to_subjects = defaultdict(list)
-    for project_id, subject_id in project_subject_ids:
-        project_to_subjects[project_id].append(subject_id)
-
-    project_count = len(project_to_subjects)
+    project_ids = get_project_ids(connection, args)
+    project_count = len(project_ids)
     project_index = 1
 
-    for project_id, subject_ids in project_to_subjects.items():
+    for project_id in project_ids:
         if args.verbose:
-            print(f"{project_index} / {project_count} / {project_id}")
+            print(f"{project_index} / {project_count}   {project_id}")
         project_index += 1
 
-        output_file = Path(args.output_folder) / f"{project_id}_subjects.xml"
-        with open(output_file, "w", encoding="utf-8") as f:
-            for subject_id in subject_ids:
-                try:
-                    xml = connection.get(f"/data/subjects/{subject_id}?format=xml")
-                    root = ET.fromstring(xml.content)
-                    demographics = root.find(".//{http://nrg.wustl.edu/xnat}demographics")
+        try:
+            xml_response = connection.get(f"/data/projects/{project_id}/subjects", query=query_dictionary)
+            pretty_xml = xml.dom.minidom.parseString(xml_response.content).toprettyxml(indent="  ")
 
-                    if demographics is not None:
-                        f.write(ET.tostring(demographics, encoding="unicode"))
-                        f.write("\n")
-                except Exception as e:
-                    print(f"[ERROR] Failed to extract/save demographics for {subject_id} in {project_id}: {e}")
+            output_file = Path(args.output_folder) / f"{project_id}.subjects.xml"
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(pretty_xml)
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve demographics XML for {project_id}: {e}")
 
     print("[INFO] Subject demographics XML retrieval completed.")
 
