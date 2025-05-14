@@ -1026,9 +1026,14 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
 
 def execute_get_subject_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Retrieves subject XML data for a list of project/subject pairs and writes each subject as a separate file.
-    Output filename: <projectID>_<subjectID>.xml
+    Retrieves full <xnat:Subject> XML blocks for a list of project/subject pairs
+    and writes one combined XML file per project.
+    Output filename: <projectID>_subjects.xml
     """
+
+    import xml.etree.ElementTree as ET
+    from collections import defaultdict
+
     if not args.output_folder:
         print("[ERROR] --output_folder is required.")
         return
@@ -1036,27 +1041,34 @@ def execute_get_subject_xml(connection: XNATSession, args: argparse.Namespace) -
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
     project_subject_ids = get_project_subject_ids(connection, args)
-    subject_count = len(project_subject_ids)
-    subject_index = 1
 
-    for row in project_subject_ids:
-        project_id = row[0]
-        subject_id = row[1]
+    # Group subjects by project
+    project_to_subjects = defaultdict(list)
+    for project_id, subject_id in project_subject_ids:
+        project_to_subjects[project_id].append(subject_id)
 
+    project_count = len(project_to_subjects)
+    project_index = 1
+
+    for project_id, subject_ids in project_to_subjects.items():
         if args.verbose:
-            print(f"{subject_index} / {subject_count} / {project_id}_{subject_id}")
-            subject_index += 1
+            print(f"{project_index} / {project_count} / {project_id}")
+        project_index += 1
 
-        try:
-            xml = connection.get(f"/data/subjects/{subject_id}?format=xml")
-            output_file = Path(args.output_folder) / f"{project_id}_{subject_id}.xml"
-            with open(output_file, "w", encoding="utf-8") as f:
-                f.write(xml.content.decode("utf-8"))
-        except Exception as e:
-            print(f"[ERROR] Failed to fetch/save subject {subject_id} in project {project_id}: {e}")
+        output_file = Path(args.output_folder) / f"{project_id}_subjects.xml"
+        with open(output_file, "w", encoding="utf-8") as f:
+            for index, subject_id in enumerate(subject_ids, start=1):
+                try:
+                    xml = connection.get(f"/data/subjects/{subject_id}?format=xml")
+                    root = ET.fromstring(xml.content)
+                    f.write(ET.tostring(root, encoding="unicode"))
+                    f.write("\n")
+                    if args.verbose:
+                        print(f"  {index} / {len(subject_ids)}  {subject_id}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to fetch/save subject {subject_id} in project {project_id}: {e}")
 
     print("[INFO] Entire subject XML with all values retrieval completed successfully.")
-
 
 
 def execute_get_series_import_filter_json(connection: XNATSession, args: argparse.Namespace) -> None:
@@ -1318,29 +1330,52 @@ def execute_get_project_xml(connection: XNATSession, args: argparse.Namespace) -
 #
 
 # This ver
-def execute_get_subject_demographics_json(connection: XNATSession, args: argparse.Namespace) -> None:
-    # Check if output folder is provided
+
+def execute_get_subject_demographics_xml(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves only <xnat:demographics> XML elements for each subject and writes one file per project.
+    Output filename: <projectID>_subjects.xml
+    """
+
+    import xml.etree.ElementTree as ET
+
     if not args.output_folder:
         print("[ERROR] --output_folder is required.")
         return
 
-    demographics_folder = Path(args.output_folder)
-    demographics_folder.mkdir(parents=True, exist_ok=True)
-    query_dictionary={"columns": "label,project,gender,handedness,education,race,ethnicity,group,yob,dob,age,height,weight,src"}
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
-    project_ids = get_project_ids(connection, args)
-    project_count = len(project_ids)
+    project_subject_ids = get_project_subject_ids(connection, args)
+
+    # Group subjects by project
+    from collections import defaultdict
+    project_to_subjects = defaultdict(list)
+    for project_id, subject_id in project_subject_ids:
+        project_to_subjects[project_id].append(subject_id)
+
+    project_count = len(project_to_subjects)
     project_index = 1
-    for project_id in project_ids:
-        print(f"{project_index} / {project_count}   {project_id} ")
+
+    for project_id, subject_ids in project_to_subjects.items():
+        if args.verbose:
+            print(f"{project_index} / {project_count} / {project_id}")
         project_index += 1
 
-        subjects_json=connection.get_json(f"/data/projects/{project_id}/subjects", query=query_dictionary)
-        subjects_file = demographics_folder/f"{project_id}.subjects.json"
-        with open(subjects_file, "w", encoding="utf-8") as f:
-            json.dump(subjects_json, f, indent=4)
-            f.close()
+        output_file = Path(args.output_folder) / f"{project_id}_subjects.xml"
+        with open(output_file, "w", encoding="utf-8") as f:
+            for subject_id in subject_ids:
+                try:
+                    xml = connection.get(f"/data/subjects/{subject_id}?format=xml")
+                    root = ET.fromstring(xml.content)
+                    demographics = root.find(".//{http://nrg.wustl.edu/xnat}demographics")
 
+                    if demographics is not None:
+                        f.write(ET.tostring(demographics, encoding="unicode"))
+                        f.write("\n")
+                except Exception as e:
+                    print(f"[ERROR] Failed to extract/save demographics for {subject_id} in {project_id}: {e}")
+
+    print("[INFO] Subject demographics XML retrieval completed.")
 
 def execute_get_resource_config(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -1483,8 +1518,8 @@ def execute_get_session_json(connection: XNATSession, args: argparse.Namespace) 
       
 
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
-    if args.subjects_demographics_json:
-        execute_get_subject_demographics_json(connection, args)
+    if args.subject_demographics_xml:
+        execute_get_subject_demographics_xml(connection, args)
         return
 
     if args.subject_xml:
@@ -1631,7 +1666,7 @@ if __name__ == "__main__":
     parser.add_argument('-u', '--users',           dest='users',                    help='Listing Verb object: Users',                 action='store_true')
     parser.add_argument('-g', '--groups',          dest='groups',                   help='Object: Groups (for both LIST and REMOVE)',  action='store_true')
     parser.add_argument(      '--subjects',        dest='subjects',                 help='Include list of subjects in output',         action='store_true')
-    parser.add_argument(   '--subjects_demographics_json', dest='subjects_demographics_json',  help='Operation includes subject JSON',            action='store_true')
+    parser.add_argument(   '--subject_demographics_xml', dest='subject_demographics_xml',  help='Operation includes subject XML',    action='store_true')
     parser.add_argument(    '--seriesImportFilter',dest='seriesImportFilter',       help="Extract series import filter for projects",  action='store_true')
     parser.add_argument(      '--accessibilities', dest='accessibilities',          help="Accessibilities for projects",               action='store_true')
     parser.add_argument(      '--sessions',        dest='sessions',                 help="Include list of sessions in output",         action='store_true')
