@@ -1024,35 +1024,40 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
 
-def execute_get_project_xml(connection: XNATSession, args: argparse.Namespace) -> None:
+def execute_get_subject_xml(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves subject XML data for a list of project/subject pairs and writes each subject as a separate file.
+    Output filename: <projectID>_<subjectID>.xml
+    """
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
+
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
-    project_ids = []
-    if args.csv_file:
-        with open(args.csv_file, mode='r') as file:
-            csv_reader = csv.reader(file, delimiter='\t')
-            for row in csv_reader:
-                project_ids.append(row[0])  # Assuming the project ID is in the first column
-    else:
-        all_projects = connection.get_json(f"/data/projects")
-        # Apply sleep after the REST call (moved up here)
-        result = all_projects['ResultSet']['Result']
+    project_subject_ids = get_project_subject_ids(connection, args)
+    subject_count = len(project_subject_ids)
+    subject_index = 1
 
-        for project_json in result:
-            project_ids.append(project_json['ID'])
+    for row in project_subject_ids:
+        project_id = row[0]
+        subject_id = row[1]
 
-    project_count = len(project_ids)
-    project_index = 1
-    for id in project_ids:
         if args.verbose:
-            print(f"{project_index} / {project_count} / {id}")
-            project_index += 1
+            print(f"{subject_index} / {subject_count} / {project_id}_{subject_id}")
+            subject_index += 1
 
-        xml=connection.get(f"/data/projects/{id}?format=xml")
-        z = xml.content
-        f=open(f"{args.output_folder}/{id}.xml", "w")
-        f.write(xml.content.decode("utf-8"))
-        f.close()
+        try:
+            xml = connection.get(f"/data/subjects/{subject_id}?format=xml")
+            output_file = Path(args.output_folder) / f"{project_id}_{subject_id}.xml"
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(xml.content.decode("utf-8"))
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch/save subject {subject_id} in project {project_id}: {e}")
+
+    print("[INFO] Entire subject XML with all values retrieval completed successfully.")
+
+
 
 def execute_get_series_import_filter_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -1217,31 +1222,32 @@ def count_unique_projects(project_subject_ids: []) -> int:
 
     return len(project_set)
 
-def execute_get_subject_json(connection: XNATSession, args: argparse.Namespace) -> None:
-    # Check if output folder is provided
-    if not args.output_folder:
-        print("[ERROR] --output_folder is required.")
-        return
+def execute_get_project_xml(connection: XNATSession, args: argparse.Namespace) -> None:
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
-    project_subject_ids = get_project_subject_ids(connection, args)
-    subject_count = len(project_subject_ids)
-    project_count = count_unique_projects(project_subject_ids)
-    print(f"Project count: {project_count}")
-    print(f"Subject count: {subject_count}")
+    project_ids = []
+    if args.csv_file:
+        with open(args.csv_file, mode='r') as file:
+            csv_reader = csv.reader(file, delimiter='\t')
+            for row in csv_reader:
+                project_ids.append(row[0])  # Assuming the project ID is in the first column
+    else:
+        all_projects = connection.get_json(f"/data/projects")
+        result = all_projects['ResultSet']['Result']
+        for project_json in result:
+            project_ids.append(project_json['ID'])
 
-    last_project = ""
-    project_index = 0
-    subject_index = 1
-    for row in project_subject_ids:
-        project_id = row[0]
-        subject_id = row[1]
-        if (project_id != last_project):
-            last_project = project_id
+    project_count = len(project_ids)
+    project_index = 1
+    for id in project_ids:
+        if args.verbose:
+            print(f"{project_index} / {project_count} / {id}")
             project_index += 1
-        print(f"{project_index} / {project_count}  {subject_index} / {subject_count}  {project_id}/{subject_id}")
-        subject_index += 1
 
-    print("[INFO] Subject JSON retrieval completed successfully.")
+        xml = connection.get(f"/data/projects/{id}?format=xml")
+        with open(f"{args.output_folder}/{id}.xml", "w") as f:
+            f.write(xml.content.decode("utf-8"))
+
 '''
         project_folder = Path(args.output_folder) / project_id
         project_folder.mkdir(parents=True, exist_ok=True)
@@ -1481,8 +1487,8 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
         execute_get_subject_demographics_json(connection, args)
         return
 
-    if args.subjects:
-        execute_get_subject_json(connection, args)
+    if args.subject_xml:
+        execute_get_subject_xml(connection, args)
         return
 
     if args.project_xml:
@@ -1637,6 +1643,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--configs',         dest='configs',                  help="Specify configs for list/get",               action='store_true')
     parser.add_argument(      '--resource_config', dest='resource_config',          help="Retrieve resource_config for projects",      action='store_true')
     parser.add_argument(      '--container_service',dest='container_service',       help="Retrieve container_service for projects",    action='store_true')
+    parser.add_argument(       '--subject_xml',    dest='subject_xml',              help="Retrieve subject XMLs by session ID",        action='store_true')
     parser.add_argument(       '--session_json',   dest='session_json',             help="Retrieve session JSONs by session ID",       action='store_true')        
 
     ## Further modifiers
