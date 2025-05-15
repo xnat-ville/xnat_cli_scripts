@@ -8,8 +8,8 @@
 get_subjects() {
     export PYTHONPATH="$1/../src"
 
-    echo "python3 -m xnat_cli_scripts.projects $2 --get --subject_xml --output_folder $3"
-          python3 -m xnat_cli_scripts.projects $2 --get --subject_xml --output_folder $3
+    echo "python3 -m xnat_cli_scripts.projects $2 --get --full_subject_xml --output_folder $3"
+          python3 -m xnat_cli_scripts.projects $2 --get --full_subject_xml --output_folder $3
 
 }
 
@@ -34,6 +34,6 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
- rm -rf test_data/subjects_xml
+ rm -rf test_data/full_subject_xml
 
- get_subjects "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/subjects_xml"
+ get_subjects "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/full_subject_xml"

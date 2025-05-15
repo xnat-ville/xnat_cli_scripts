@@ -1024,7 +1024,7 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
 
-def execute_get_subject_xml(connection: XNATSession, args: argparse.Namespace) -> None:
+def execute_get_full_subject_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves full <xnat:Subject> XML blocks for a list of project/subject pairs
     and writes one combined XML file per project.
@@ -1516,8 +1516,8 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
         execute_get_subject_demographics_xml(connection, args)
         return
 
-    if args.subject_xml:
-        execute_get_subject_xml(connection, args)
+    if args.full_subject_xml:
+        execute_get_full_subject_xml(connection, args)
         return
 
     if args.project_xml:
@@ -1672,7 +1672,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--configs',         dest='configs',                  help="Specify configs for list/get",               action='store_true')
     parser.add_argument(      '--resource_config', dest='resource_config',          help="Retrieve resource_config for projects",      action='store_true')
     parser.add_argument(      '--container_service',dest='container_service',       help="Retrieve container_service for projects",    action='store_true')
-    parser.add_argument(       '--subject_xml',    dest='subject_xml',              help="Retrieve subject XMLs by session ID",        action='store_true')
+    parser.add_argument(       '--full_subject_xml',dest='full_subject_xml',              help="Retrieve subject XMLs by session ID",        action='store_true')
     parser.add_argument(       '--session_json',   dest='session_json',             help="Retrieve session JSONs by session ID",       action='store_true')        
 
     ## Further modifiers
