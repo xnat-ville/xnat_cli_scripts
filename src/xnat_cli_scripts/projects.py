@@ -877,31 +877,31 @@ def execute_update_series_import_filter(connection: XNATSession, args: argparse.
         except Exception as e:
             print(f"[ERROR] Failed to process {filename}: {e}")
 
-def execute_update_subjects_json(connection: XNATSession, args: argparse.Namespace) -> None:
-    """
-    THIS USES XML FORMAT TO UPDATE NOW.
+from urllib.parse import urlencode
 
-    Creates subjects in XNAT from demographics JSON files.
-    Sends all non-empty fields using XNAT's XML format, embedding demographics in a nested element.
+def execute_update_subject_demographics_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-
-    import xml.etree.ElementTree as ET
+    Updates subject demographics in XNAT using bulk project JSON files (e.g., KenanTesting3.json).
+    Iterates through each subject and sends:
+    - the subject dictionary as the JSON body
+    - all fields as URL query parameters (including ID, label, project, URI, etc.)
+    """
 
     if not args.input_folder:
         print("[ERROR] --input_folder is required for --update --subjects")
         return
 
     try:
-        files = [f for f in os.listdir(args.input_folder) if f.endswith(".subjects.json")]
+        files = [f for f in os.listdir(args.input_folder) if f.endswith(".json")]
     except Exception as e:
         print(f"[ERROR] Failed to read input folder: {e}")
         return
 
     if not files:
-        print("[INFO] No .subjects.json files found.")
+        print("[INFO] No .json files found.")
         return
 
-    # Optional project-subject filter
+    # Optional subject filter
     valid_subjects = None
     if args.csv_projects_subjects_file:
         try:
@@ -915,12 +915,13 @@ def execute_update_subjects_json(connection: XNATSession, args: argparse.Namespa
             print(f"[ERROR] Failed to load subject filter CSV: {e}")
             return
 
-    headers = {'Content-Type': 'application/xml'}
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
 
     for file in files:
-        project_id = Path(file).with_suffix('').with_suffix('').name
         file_path = Path(args.input_folder) / file
-
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 full_data = json.load(f)
@@ -930,50 +931,41 @@ def execute_update_subjects_json(connection: XNATSession, args: argparse.Namespa
 
         subjects = full_data.get("ResultSet", {}).get("Result", [])
         if not subjects:
+            print(f"[WARNING] No subjects found in {file_path}")
             continue
 
         for subj in subjects:
-            label = subj.get("label")
+            subject_id = subj.get("ID")
             project = subj.get("project")
-            if not label or not project:
-                print(f"[WARNING] Skipping subject missing label/project in {file}")
+
+            if not subject_id or not project:
+                print(f"[WARNING] Skipping subject missing ID or project in {file_path}")
                 continue
 
-            if valid_subjects and (project, subj.get("ID")) not in valid_subjects:
+            if valid_subjects and (project, subject_id) not in valid_subjects:
                 continue
 
-            # Create XML payload with demographics nesting
-            subject_elem = ET.Element("xnat:Subject")
-            subject_elem.set("xmlns:xnat", "http://nrg.wustl.edu/xnat")
-            subject_elem.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
-            subject_elem.set("project", project)
-            subject_elem.set("label", label)
-
-            demographics_elem = ET.SubElement(subject_elem, "xnat:demographics")
-            demographics_elem.set("xsi:type", "xnat:demographicData")
-
-            for key, value in subj.items():
-                if value not in ("", None) and key not in ("label", "project", "URI", "ID"):
-                    child = ET.SubElement(demographics_elem, f"xnat:{key}")
-                    child.text = str(value)
-
-            payload = ET.tostring(subject_elem, encoding="utf-8").decode("utf-8")
+            # Send ALL fields in query string that were gotten with the GET, including empty values
+            query_params = urlencode({key: str(value) for key, value in subj.items()})
+            url = f"/data/archive/projects/{project}/subjects/{subject_id}?{query_params}"
 
             try:
-                url = f"/data/projects/{project}/subjects/{label}"
-                response = connection.put(url, data=payload, headers=headers)
+                response = connection.put(
+                    url,
+                    json=subj,
+                    headers=headers
+                )
 
                 if response.status_code in [200, 201]:
-                    print(f"{project}/{label} CREATED")
+                    print(f"[SUCCESS] {project}/{subject_id} uploaded.")
                 elif response.status_code == 409:
-                    print(f"{project}/{label} ALREADY EXISTS (conflict)")
+                    print(f"[SKIP] {project}/{subject_id} already exists (conflict).")
                 else:
-                    print(f"[ERROR] PUT failed for {project}/{label}: {response.status_code} {response.text}")
+                    print(f"[ERROR] {project}/{subject_id} failed: {response.status_code} {response.text}")
             except Exception as e:
-                print(f"[ERROR] Failed to PUT subject {label} to {project}: {e}")
+                print(f"[ERROR] Exception uploading {project}/{subject_id}: {e}")
 
-    print("[INFO] Subject creation complete.")
-
+    print("[INFO] Subject upload complete.")
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
     
@@ -1018,8 +1010,8 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         execute_update_prearchive_code(connection, args)
     elif args.seriesImportFilter:
         execute_update_series_import_filter(connection, args)
-    elif args.subjects:
-        execute_update_subjects_json(connection, args)
+    elif args.subject_demographics_json:
+        execute_update_subject_demographics_json(connection, args)
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
@@ -1331,45 +1323,28 @@ def execute_get_project_xml(connection: XNATSession, args: argparse.Namespace) -
 
 # This ver
 
-def execute_get_subject_demographics_xml(connection: XNATSession, args: argparse.Namespace) -> None:
-    """
-    Retrieves subject demographics as XML using the bulk subjects endpoint and writes one XML file per project.
-    Output filename: <projectID>.subjects.xml
-    """
-
-    import xml.dom.minidom
-
+def execute_get_subject_demographics_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    # Check if output folder is provided
     if not args.output_folder:
         print("[ERROR] --output_folder is required.")
         return
 
-    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
-
-    query_dictionary = {
-        "columns": "label,project,gender,handedness,education,race,ethnicity,group,yob,dob,age,height,weight,src",
-        "format": "xml"
-    }
+    demographics_folder = Path(args.output_folder)
+    demographics_folder.mkdir(parents=True, exist_ok=True)
+    query_dictionary={"columns": "label,project,gender,handedness,education,race,ethnicity,group,yob,dob,age,height,weight,src"}
 
     project_ids = get_project_ids(connection, args)
     project_count = len(project_ids)
     project_index = 1
-
     for project_id in project_ids:
-        if args.verbose:
-            print(f"{project_index} / {project_count}   {project_id}")
+        print(f"{project_index} / {project_count}   {project_id} ")
         project_index += 1
 
-        try:
-            xml_response = connection.get(f"/data/projects/{project_id}/subjects", query=query_dictionary)
-            pretty_xml = xml.dom.minidom.parseString(xml_response.content).toprettyxml(indent="  ")
-
-            output_file = Path(args.output_folder) / f"{project_id}.subjects.xml"
-            with open(output_file, "w", encoding="utf-8") as f:
-                f.write(pretty_xml)
-        except Exception as e:
-            print(f"[ERROR] Failed to retrieve demographics XML for {project_id}: {e}")
-
-    print("[INFO] Subject demographics XML retrieval completed.")
+        subjects_json=connection.get_json(f"/data/projects/{project_id}/subjects", query=query_dictionary)
+        subjects_file = demographics_folder/f"{project_id}.json"
+        with open(subjects_file, "w", encoding="utf-8") as f:
+            json.dump(subjects_json, f, indent=4)
+            f.close()
 
 def execute_get_resource_config(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -1512,8 +1487,8 @@ def execute_get_session_json(connection: XNATSession, args: argparse.Namespace) 
       
 
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
-    if args.subject_demographics_xml:
-        execute_get_subject_demographics_xml(connection, args)
+    if args.subject_demographics_json:
+        execute_get_subject_demographics_json(connection, args)
         return
 
     if args.full_subject_xml:
@@ -1660,7 +1635,7 @@ if __name__ == "__main__":
     parser.add_argument('-u', '--users',           dest='users',                    help='Listing Verb object: Users',                 action='store_true')
     parser.add_argument('-g', '--groups',          dest='groups',                   help='Object: Groups (for both LIST and REMOVE)',  action='store_true')
     parser.add_argument(      '--subjects',        dest='subjects',                 help='Include list of subjects in output',         action='store_true')
-    parser.add_argument(   '--subject_demographics_xml', dest='subject_demographics_xml',  help='Operation includes subject XML',    action='store_true')
+    parser.add_argument(   '--subject_demographics_json', dest='subject_demographics_json',  help='Operation includes subject XML',    action='store_true')
     parser.add_argument(    '--seriesImportFilter',dest='seriesImportFilter',       help="Extract series import filter for projects",  action='store_true')
     parser.add_argument(      '--accessibilities', dest='accessibilities',          help="Accessibilities for projects",               action='store_true')
     parser.add_argument(      '--sessions',        dest='sessions',                 help="Include list of sessions in output",         action='store_true')

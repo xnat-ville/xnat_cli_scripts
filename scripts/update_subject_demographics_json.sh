@@ -8,8 +8,8 @@
 update_subjects_json() {
     export PYTHONPATH="$1/../src"
 
-    echo python3 -m xnat_cli_scripts.projects $2 --update --subjects --input_folder $3
-         python3 -m xnat_cli_scripts.projects $2 --update --subjects --input_folder $3
+    echo python3 -m xnat_cli_scripts.projects $2 --update --subject_demographics_json --input_folder $3
+         python3 -m xnat_cli_scripts.projects $2 --update --subject_demographics_json --input_folder $3
 }
 
 # Main starts here
@@ -33,4 +33,4 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False"
 
-update_subjects_json "$BASE_FOLDER" "$BOILER_PLATE" "test_data/subjects_json"
+update_subjects_json "$BASE_FOLDER" "$BOILER_PLATE" "test_data/subject_demographics_json"

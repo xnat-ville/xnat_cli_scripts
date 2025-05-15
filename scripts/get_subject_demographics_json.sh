@@ -8,8 +8,8 @@
 get_subject_demographics() {
     export PYTHONPATH="$1/../src"
 
-    echo "python3 -m xnat_cli_scripts.projects $2 --get --subject_demographics_xml --output_folder $3"
-          python3 -m xnat_cli_scripts.projects $2 --get --subject_demographics_xml --output_folder $3
+    echo "python3 -m xnat_cli_scripts.projects $2 --get --subject_demographics_json --output_folder $3"
+          python3 -m xnat_cli_scripts.projects $2 --get --subject_demographics_json --output_folder $3
 }
 
 # Main starts here
@@ -33,6 +33,6 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-rm -rf test_data/subject_demographics_xml
+rm -rf test_data/subject_demographics_json
 
-get_subject_demographics "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/subject_demographics_xml"
+get_subject_demographics "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/subject_demographics_json"
