@@ -1016,51 +1016,42 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
 
-def execute_get_full_subject_xml(connection: XNATSession, args: argparse.Namespace) -> None:
+def execute_get_complete_subject_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Retrieves full <xnat:Subject> XML blocks for a list of project/subject pairs
-    and writes one combined XML file per project.
-    Output filename: <projectID>_subjects.xml
+    Fetches full JSON data for all subjects in each project.
+    Saves one file per project: <project_id>.complete_subjects.json
     """
-
-    import xml.etree.ElementTree as ET
-    from collections import defaultdict
-
     if not args.output_folder:
         print("[ERROR] --output_folder is required.")
         return
 
-    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+    output_dir = Path(args.output_folder)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    project_subject_ids = get_project_subject_ids(connection, args)
-
-    # Group subjects by project
-    project_to_subjects = defaultdict(list)
-    for project_id, subject_id in project_subject_ids:
-        project_to_subjects[project_id].append(subject_id)
-
-    project_count = len(project_to_subjects)
+    project_ids = get_project_ids(connection, args)
+    project_count = len(project_ids)
     project_index = 1
 
-    for project_id, subject_ids in project_to_subjects.items():
-        if args.verbose:
-            print(f"{project_index} / {project_count} / {project_id}")
+    for project_id in project_ids:
+        print(f"{project_index} / {project_count}  {project_id}")
         project_index += 1
 
-        output_file = Path(args.output_folder) / f"{project_id}_subjects.xml"
-        with open(output_file, "w", encoding="utf-8") as f:
-            for index, subject_id in enumerate(subject_ids, start=1):
-                try:
-                    xml = connection.get(f"/data/subjects/{subject_id}?format=xml")
-                    root = ET.fromstring(xml.content)
-                    f.write(ET.tostring(root, encoding="unicode"))
-                    f.write("\n")
-                    if args.verbose:
-                        print(f"  {index} / {len(subject_ids)}  {subject_id}")
-                except Exception as e:
-                    print(f"[ERROR] Failed to fetch/save subject {subject_id} in project {project_id}: {e}")
+        try:
+            subjects = connection.projects[project_id].subjects.values()
+            subject_json_list = []
 
-    print("[INFO] Entire subject XML with all values retrieval completed successfully.")
+            for subject in subjects:
+                subj_data = connection.get_json(f"/data/subjects/{subject.id}")
+                subject_json_list.append(subj_data)
+
+            out_file = output_dir / f"{project_id}.complete_subjects.json"
+            with open(out_file, "w", encoding="utf-8") as f:
+                json.dump({"subjects": subject_json_list}, f, indent=4)
+
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch/save subjects for {project_id}: {e}")
+
+    print("[INFO] Complete subject JSON export finished.")
 
 
 def execute_get_series_import_filter_json(connection: XNATSession, args: argparse.Namespace) -> None:
@@ -1491,8 +1482,8 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
         execute_get_subject_demographics_json(connection, args)
         return
 
-    if args.full_subject_xml:
-        execute_get_full_subject_xml(connection, args)
+    if args.complete_subject_json:
+        execute_get_complete_subject_json(connection, args)
         return
 
     if args.project_xml:
@@ -1647,7 +1638,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--configs',         dest='configs',                  help="Specify configs for list/get",               action='store_true')
     parser.add_argument(      '--resource_config', dest='resource_config',          help="Retrieve resource_config for projects",      action='store_true')
     parser.add_argument(      '--container_service',dest='container_service',       help="Retrieve container_service for projects",    action='store_true')
-    parser.add_argument(       '--full_subject_xml',dest='full_subject_xml',              help="Retrieve subject XMLs by session ID",        action='store_true')
+    parser.add_argument(       '--complete_subject_json',dest='complete_subject_json',help="Retrieve entire subject JSONs by session ID",        action='store_true')
     parser.add_argument(       '--session_json',   dest='session_json',             help="Retrieve session JSONs by session ID",       action='store_true')        
 
     ## Further modifiers
