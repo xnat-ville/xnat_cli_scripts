@@ -34,5 +34,5 @@ set +e
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 mkdir -p test_data
-list_experiments "$BASE_FOLDER" "$BOILER_PLATE" test_data/projects.txt
+list_experiments "$BASE_FOLDER" "$BOILER_PLATE" test_data/experiments.txt
 
