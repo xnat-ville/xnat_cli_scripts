@@ -985,6 +985,8 @@ def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> No
         execute_list_project_configs(connection, args)
     elif args.subjects and args.sessions:
         execute_list_subjects_sessions(connection, args)
+    elif args.experiments:
+        execute_list_experiments(connection, args)
     else:
         execute_list_projects(connection, args)
 
@@ -1601,6 +1603,17 @@ def execute_list_subjects_sessions(connection: XNATSession, args: argparse.Names
 
         project_index += 1
 
+def execute_list_experiments(connection: XNATSession, args: argparse.Namespace):
+    project_ids = get_project_ids(connection, args)
+    tab = "\t"
+    project_index = 1
+    project_count = len(project_ids)
+    for project_id in project_ids:
+        experiments = connection.get_json(f"/data/projects/{project_id}/experiments")
+        for experiment in experiments['ResultSet']['Result']:
+            print(f"{project_id}{tab}{experiment['label']}{tab}{experiment['ID']}")
+
+
 def execute_get_subjects_list(connection: XNATSession, project_id: str) -> [] :
     subjects_list = []
     project_object = connection.projects[project_id]
@@ -1639,7 +1652,8 @@ if __name__ == "__main__":
     parser.add_argument(      '--resource_config', dest='resource_config',          help="Retrieve resource_config for projects",      action='store_true')
     parser.add_argument(      '--container_service',dest='container_service',       help="Retrieve container_service for projects",    action='store_true')
     parser.add_argument(       '--complete_subject_json',dest='complete_subject_json',help="Retrieve entire subject JSONs by session ID",        action='store_true')
-    parser.add_argument(       '--session_json',   dest='session_json',             help="Retrieve session JSONs by session ID",       action='store_true')        
+    parser.add_argument(       '--session_json',   dest='session_json',             help="Retrieve session JSONs by session ID",       action='store_true')
+    parser.add_argument(       '--experiments',    dest='experiments',              help="Include experiments in output list",         action='store_true')
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
