@@ -1219,6 +1219,23 @@ def count_unique_projects(project_subject_ids: []) -> int:
 
     return len(project_set)
 
+def execute_get_project_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+    project_ids = get_project_ids(connection, args)
+    project_count = len(project_ids)
+    project_index = 1
+
+    for id in project_ids:
+        if args.verbose:
+            print(f"{project_index} / {project_count} / {id}")
+            project_index += 1
+
+        project_json = connection.get_json(f"/data/projects/{id}")
+        with open(f"{args.output_folder}/{id}.json", "w") as f:
+            json.dump(project_json, f, indent=4)
+            f.close()
+
+
 def execute_get_project_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
@@ -1490,7 +1507,11 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
 
     if args.project_xml:
         execute_get_project_xml(connection, args)
-        return  
+        return
+
+    if args.project_json:
+        execute_get_project_json(connection, args)
+        return
 
     if args.seriesImportFilter:
         execute_get_series_import_filter_json(connection, args)
@@ -1644,6 +1665,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--accessibilities', dest='accessibilities',          help="Accessibilities for projects",               action='store_true')
     parser.add_argument(      '--sessions',        dest='sessions',                 help="Include list of sessions in output",         action='store_true')
     parser.add_argument(      '--project_xml',     dest='project_xml',              help='Extract/Operate on Project XML',             action='store_true')
+    parser.add_argument(      '--project_json',    dest='project_json',             help='Extract/Operate on Project JSON',            action='store_true')
     parser.add_argument(      '--anon',            dest='anon',                     help="List anonymization status for projects",     action='store_true')
     parser.add_argument(      '--scan_types',      dest='scan_types',               help='List scan types',                            action='store_true')
     parser.add_argument(      '--prearchive_code', dest='prearchive_code',          help="List prearchive code for projects",          action='store_true')
