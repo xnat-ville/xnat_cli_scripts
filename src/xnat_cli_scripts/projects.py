@@ -881,10 +881,9 @@ from urllib.parse import urlencode
 
 def execute_update_subject_demographics_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Updates subject demographics in XNAT using bulk project JSON files (e.g., KenanTesting3.json).
-    Iterates through each subject and sends:
-    - the subject dictionary as the JSON body
-    - all fields as URL query parameters (including ID, label, project, URI, etc.)
+    Updates subject demographics in XNAT using bulk project JSON files.
+    Only updates subjects that originate from the current project.
+    Skips shared subjects and logs a message explaining why.
     """
 
     if not args.input_folder:
@@ -921,7 +920,9 @@ def execute_update_subject_demographics_json(connection: XNATSession, args: argp
     }
 
     for file in files:
+        project_id = Path(file).stem
         file_path = Path(args.input_folder) / file
+
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 full_data = json.load(f)
@@ -936,18 +937,22 @@ def execute_update_subject_demographics_json(connection: XNATSession, args: argp
 
         for subj in subjects:
             subject_id = subj.get("ID")
-            project = subj.get("project")
+            subject_label = subj.get("label")
+            subject_project = subj.get("project")
 
-            if not subject_id or not project:
-                print(f"[WARNING] Skipping subject missing ID or project in {file_path}")
+            if not subject_id or not subject_project:
+                print(f"[WARNING] Skipping malformed subject in {file_path}")
                 continue
 
-            if valid_subjects and (project, subject_id) not in valid_subjects:
+            if subject_project != project_id:
+                print(f"[INFO] Skipping subject {subject_label} — was shared from project {subject_project} to {project_id}")
                 continue
 
-            # Send ALL fields in query string that were gotten with the GET, including empty values
+            if valid_subjects and (subject_project, subject_id) not in valid_subjects:
+                continue
+
             query_params = urlencode({key: str(value) for key, value in subj.items()})
-            url = f"/data/archive/projects/{project}/subjects/{subject_id}?{query_params}"
+            url = f"/data/archive/projects/{project_id}/subjects/{subject_id}?{query_params}"
 
             try:
                 response = connection.put(
@@ -957,13 +962,13 @@ def execute_update_subject_demographics_json(connection: XNATSession, args: argp
                 )
 
                 if response.status_code in [200, 201]:
-                    print(f"[SUCCESS] {project}/{subject_id} uploaded.")
+                    print(f"[SUCCESS] {project_id}/{subject_label} updated.")
                 elif response.status_code == 409:
-                    print(f"[SKIP] {project}/{subject_id} already exists (conflict).")
+                    print(f"[SKIP] {project_id}/{subject_label} already exists (conflict).")
                 else:
-                    print(f"[ERROR] {project}/{subject_id} failed: {response.status_code} {response.text}")
+                    print(f"[ERROR] {project_id}/{subject_label} failed: {response.status_code} {response.text}")
             except Exception as e:
-                print(f"[ERROR] Exception uploading {project}/{subject_id}: {e}")
+                print(f"[ERROR] Exception uploading {project_id}/{subject_label}: {e}")
 
     print("[INFO] Subject upload complete.")
 
