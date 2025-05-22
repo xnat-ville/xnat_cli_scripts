@@ -879,13 +879,48 @@ def execute_update_series_import_filter(connection: XNATSession, args: argparse.
 
 from urllib.parse import urlencode
 
+def share_subjects_to_project(connection: XNATSession, shared_subjects: list) -> None:
+    """
+    Shares subjects from their original (primary) project into the current target project using XNAT's official sharing API.
+    """
+    for entry in shared_subjects:
+        subject_id     = entry["id"]
+        subject_label  = entry["label"]
+        source_project = entry["source_project"]
+        target_project = entry["target_project"]
+
+        share_url = (
+            f"/data/projects/{source_project}/subjects/{subject_id}/projects/{target_project}"
+            f"?label={subject_label}"
+        )
+
+        try:
+            response = connection.put(share_url)
+
+            if response.status_code in [200, 201]:
+                print(f"[SHARED] Subject {subject_label} ({subject_id}) shared from {source_project} to {target_project}")
+
+            elif response.status_code == 409:
+                print(f"[SKIP] Subject {subject_label} already shared with {target_project}")
+
+            elif response.status_code == 403:
+                print(f"[ERROR] 403 Forbidden — Check project permissions or source project mismatch for subject {subject_label}")
+
+            elif response.status_code == 404:
+                print(f"[ERROR] 404 Not Found — Subject {subject_id} or project may not exist")
+
+            else:
+                print(f"[ERROR] Sharing failed for {subject_label}: {response.status_code} {response.text}")
+
+        except Exception as e:
+            print(f"[ERROR] Exception while sharing subject {subject_label}: {e}")
+
 def execute_update_subject_demographics_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Updates subject demographics in XNAT using bulk project JSON files.
-    Only updates subjects that originate from the current project.
-    Skips shared subjects and logs a message explaining why.
+    Pass 1: Update subjects that belong to the current project.
+    Pass 2: Share subjects that originated from another project (shared subjects).
     """
-
     if not args.input_folder:
         print("[ERROR] --input_folder is required for --update --subjects")
         return
@@ -919,6 +954,8 @@ def execute_update_subject_demographics_json(connection: XNATSession, args: argp
         'Accept': 'application/json'
     }
 
+    shared_subjects = []
+
     for file in files:
         project_id = Path(file).stem
         file_path = Path(args.input_folder) / file
@@ -944,23 +981,28 @@ def execute_update_subject_demographics_json(connection: XNATSession, args: argp
                 print(f"[WARNING] Skipping malformed subject in {file_path}")
                 continue
 
+            # Check for shared subject
             if subject_project != project_id:
                 print(f"[INFO] Skipping subject {subject_label} — was shared from project {subject_project} to {project_id}")
+                shared_subjects.append({
+                    "id": subject_id,
+                    "label": subject_label,
+                    "source_project": subject_project,
+                    "target_project": project_id,
+                    "json": subj
+                })
                 continue
 
+            # Optional subject filter
             if valid_subjects and (subject_project, subject_id) not in valid_subjects:
                 continue
 
+            # Build query and PUT
             query_params = urlencode({key: str(value) for key, value in subj.items()})
             url = f"/data/archive/projects/{project_id}/subjects/{subject_id}?{query_params}"
 
             try:
-                response = connection.put(
-                    url,
-                    json=subj,
-                    headers=headers
-                )
-
+                response = connection.put(url, json=subj, headers=headers)
                 if response.status_code in [200, 201]:
                     print(f"[SUCCESS] {project_id}/{subject_label} updated.")
                 elif response.status_code == 409:
@@ -970,7 +1012,13 @@ def execute_update_subject_demographics_json(connection: XNATSession, args: argp
             except Exception as e:
                 print(f"[ERROR] Exception uploading {project_id}/{subject_label}: {e}")
 
+    # Second pass: share subjects
+    if shared_subjects:
+        print(f"[INFO] Starting second pass to share {len(shared_subjects)} shared subjects.")
+        share_subjects_to_project(connection, shared_subjects)
+
     print("[INFO] Subject upload complete.")
+
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
     
