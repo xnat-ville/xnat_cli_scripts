@@ -47,9 +47,9 @@ def execute_list_investigator(connection: XNATSession, args: argparse.Namespace)
 
     # Optional filtering
     filter_ids = set()
-    if args.csv:
+    if args.csv_file:
         try:
-            with open(args.csv, newline='') as f:
+            with open(args.csv_file, newline='') as f:
                 reader = csv.reader(f)
                 for row in reader:
                     for cell in row:
@@ -319,13 +319,13 @@ def execute_create_investigator_json(connection: xnat.session.XNATSession, args:
         raise Exception("investigators --create --investigator_json requires --input_folder")
 
     investigator_ids = []
-    if args.csv:
+    if args.csv_file:
         try:
-            with open(args.csv, mode='r') as file:
+            with open(args.csv_file, mode='r') as file:
                 csv_reader = csv.reader(file, delimiter='\t')
                 investigator_ids = [row[0].strip() for row in csv_reader if row]
         except FileNotFoundError:
-            print(f"[ERROR] CSV file not found: {args.csv}")
+            print(f"[ERROR] CSV file not found: {args.csv_file}")
             return
         except Exception as e:
             print(f"[ERROR] Exception while reading CSV: {e}")
