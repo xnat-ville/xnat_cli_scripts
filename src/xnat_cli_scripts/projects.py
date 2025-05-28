@@ -542,6 +542,74 @@ def execute_update_prearchive_code(connection: XNATSession, args: argparse.Names
     except Exception as e:
         print(f"[ERROR] Failed to process CSV file: {e}")
 
+def execute_update_bids_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    NOTE: May require BIDS plugin to be installed and properly configured.
+
+    Updates the BIDS configuration for one or more XNAT projects. 
+
+    Reads .bids.json files from the specified input folder. Each file should be named
+    as <project_id>.bids.json and contain a valid JSON object representing the BIDS
+    configuration for that project. Sends a PUT request to update the BIDS config via
+    /data/projects/{project}/config/bids.
+
+    Expects --input_folder and --csv flags to be provided.
+    """
+
+    if not args.input_folder:
+        print("[ERROR]: --input_folder is required.")
+        return
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        file_path = Path(args.input_folder) / f"{project_id}.bids.json"
+        if not file_path.exists():
+            print(f"[WARNING] No file found for {project_id}")
+            continue
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                bids_data = json.load(f)
+        except Exception as e:
+            print(f"[ERROR] Failed to parse {file_path}: {e}")
+            continue
+
+        try:
+            response = connection.put(
+                f"/data/projects/{project_id}/config/bids",
+                json=bids_data,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                }
+            )
+            if response.status_code in [200, 201]:
+                print(f"[SUCCESS] BIDS config updated for {project_id}")
+            else:
+                print(f"[ERROR] {project_id} failed: {response.status_code} {response.text}")
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] BIDS update complete")
+
+
 
 def execute_list_project_accessibilities(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -1067,6 +1135,8 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         execute_update_series_import_filter(connection, args)
     elif args.subject_demographics_json:
         execute_update_subject_demographics_json(connection, args)
+    elif args.bids:
+        execute_update_bids_json(connection, args)
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
@@ -1547,7 +1617,55 @@ def execute_get_session_json(connection: XNATSession, args: argparse.Namespace) 
             xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: Unexpected error for session {session_id}: {e}")
 
     print("[INFO] Session JSON retrieval completed successfully.")
-      
+
+def execute_get_bids_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves BIDS configuration JSON for each project and saves it to an output folder.
+    Output filename: <projectID>.bids.json
+
+    Uses /data/projects/{project}/config/bids
+    """
+
+    if not args.output_folder:
+        print("[ERROR]: --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/config/bids")
+            if response.status_code == 200:
+                json_data = response.json()
+                out_path = Path(args.output_folder) / f"{project_id}.bids.json"
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue  # Skip if BIDS config doesn't exist
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] BIDS JSON retrieval complete")
+
 
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.subject_demographics_json:
@@ -1592,6 +1710,10 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
 
     if args.session_json:
         execute_get_session_json(connection, args)
+        return
+
+    if args.bids:
+        execute_get_bids_json(connection, args)
         return
 
     print("[ERROR] No valid 'GET' action specified.")
@@ -1729,6 +1851,7 @@ if __name__ == "__main__":
     parser.add_argument(       '--complete_subject_json',dest='complete_subject_json',help="Retrieve entire subject JSONs by session ID",        action='store_true')
     parser.add_argument(       '--session_json',   dest='session_json',             help="Retrieve session JSONs by session ID",       action='store_true')
     parser.add_argument(       '--experiments',    dest='experiments',              help="Include experiments in output list",         action='store_true')
+    parser.add_argument(       '--bids',           dest='bids',                     help="Interacts with XNAT BIDS configuration",     action='store_true')
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
