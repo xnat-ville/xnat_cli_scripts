@@ -1661,6 +1661,57 @@ def execute_get_session_json(connection: XNATSession, args: argparse.Namespace) 
 
     print("[INFO] Session JSON retrieval completed successfully.")
 
+
+
+def execute_get_session_xml(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves session XMLs based on a list of ProjectID, SubjectID, SessionID from a CSV/TXT file.
+    Saves each session XML to test_data/session_xml/{SessionID}.xml
+    """
+    if not args.csv_file:
+        print("[ERROR] --csv is required to get session XMLs.")
+        return
+
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    try:
+        with open(args.csv_file, mode='r') as file:
+            csv_reader = csv.reader(file, delimiter='\t')
+            session_entries = [row for row in csv_reader if row]
+    except Exception as e:
+        print(f"[ERROR] Failed to read CSV: {e}")
+        return
+
+    for row in session_entries:
+        if len(row) < 3:
+            continue  # skip invalid rows
+
+        project_id, subject_id, session_id = row[0], row[1], row[2]
+
+        try:
+            response = connection.get(f"/data/experiments/{session_id}?format=xml")
+            response.raise_for_status()
+
+            output_file = Path(args.output_folder) / f"{session_id}.xml"
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(response.content.decode("utf-8"))
+
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                pass  # skip missing sessions silently
+            else:
+                xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: Failed to retrieve session {session_id}: {e}")
+        except Exception as e:
+            xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: Unexpected error for session {session_id}: {e}")
+
+    print("[INFO] Session XML retrieval completed successfully.")
+
+
+
 def execute_get_bids_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves BIDS configuration JSON for each project and saves it to an output folder.
@@ -1753,6 +1804,10 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
 
     if args.session_json:
         execute_get_session_json(connection, args)
+        return
+
+    if args.session_xml:
+        execute_get_session_xml(connection, args)
         return
 
     if args.bids:
@@ -1893,6 +1948,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--container_service',dest='container_service',       help="Retrieve container_service for projects",    action='store_true')
     parser.add_argument(       '--complete_subject_json',dest='complete_subject_json',help="Retrieve entire subject JSONs by session ID",        action='store_true')
     parser.add_argument(       '--session_json',   dest='session_json',             help="Retrieve session JSONs by session ID",       action='store_true')
+    parser.add_argument(       '--session_xml',    dest='session_xml',              help="Retrieve session XML files by session ID",   action='store_true')
     parser.add_argument(       '--experiments',    dest='experiments',              help="Include experiments in output list",         action='store_true')
     parser.add_argument(       '--bids',           dest='bids',                     help="Interacts with XNAT BIDS configuration",     action='store_true')
 
