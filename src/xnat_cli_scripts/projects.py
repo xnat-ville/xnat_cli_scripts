@@ -1643,17 +1643,23 @@ def execute_get_session_xml(connection: XNATSession, args: argparse.Namespace) -
         print(f"[ERROR] Failed to read CSV: {e}")
         return
 
+    session_count = len(session_entries)
+    session_index = 0
     for row in session_entries:
+        session_index += 1
         if len(row) < 3:
             continue  # skip invalid rows
 
         project_id, subject_id, session_id = row[0], row[1], row[2]
 
         try:
+            Path(args.output_folder, project_id).mkdir(parents=True, exist_ok=True)
+            print(f"{session_index} / {session_count}  Project {project_id}  Subject {subject_id}  Session {session_id}  ")
             response = connection.get(f"/data/experiments/{session_id}?format=xml")
             response.raise_for_status()
 
-            output_file = Path(args.output_folder) / f"{session_id}.xml"
+#            output_file = Path(args.output_folder, project_id) / f"{session_id}.xml"
+            output_file = Path(args.output_folder, project_id, f"{session_id}.xml")
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(response.content.decode("utf-8"))
 
