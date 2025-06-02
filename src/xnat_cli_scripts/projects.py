@@ -609,7 +609,48 @@ def execute_update_bids_json(connection: XNATSession, args: argparse.Namespace) 
 
     print("[INFO] BIDS update complete")
 
+def execute_update_resource_config_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    if not args.input_folder:
+        print("[ERROR] --input_folder is required.")
+        return
 
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
+
+    headers = {"Content-Type": "text/plain"}
+    had_error = False
+
+    for file in sorted(input_path.glob("*.resource_config.json")):
+        project_id = file.stem.replace(".resource_config", "")
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            latest = find_most_recent_version(data.get("ResultSet", {}).get("Result", []))
+            if not latest or not latest.get("contents"):
+                print(f"[WARNING] No valid config contents found for {project_id}")
+                had_error = True
+                continue
+
+            response = connection.put(
+                f"/data/projects/{project_id}/config/resource_config",
+                data=latest["contents"].strip(),
+                headers=headers
+            )
+            if response.status_code in (200, 201, 204):
+                print(f"[INFO] Updated resource_config for project: {project_id} (version {latest.get('version')})")
+            else:
+                print(f"[ERROR] Failed to update {project_id}: HTTP {response.status_code} {response.text}")
+                had_error = True
+
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+            had_error = True
+
+    if not had_error: 
+        print("[INFO] Resource config JSON update complete.")
 
 def execute_list_project_accessibilities(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -1137,6 +1178,8 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         execute_update_subject_demographics_json(connection, args)
     elif args.bids:
         execute_update_bids_json(connection, args)
+    elif args.resource_config:
+        execute_update_resource_config_json(connection, args)
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
