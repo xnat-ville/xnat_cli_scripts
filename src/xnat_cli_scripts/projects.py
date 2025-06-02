@@ -866,8 +866,6 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
     except Exception as e:
         print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}")
 
-
-
 def execute_update_tracer_json(connection, args):
     """
     This is a PUT command for migration. It is not for manual updating of json files.
@@ -1128,7 +1126,6 @@ def execute_update_subject_demographics_json(connection: XNATSession, args: argp
 
     print("[INFO] Subject upload complete.")
 
-
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
     
     if args.prearchive_code:
@@ -1180,6 +1177,8 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         execute_update_bids_json(connection, args)
     elif args.resource_config:
         execute_update_resource_config_json(connection, args)
+    elif args.container_service:
+        execute_update_container_service_json(connection, args)
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
@@ -1567,51 +1566,55 @@ def execute_get_resource_config(connection: XNATSession, args: argparse.Namespac
 
     print("[INFO] Resource config JSON retrieval complete.")
 
-def execute_get_container_service(connection: XNATSession, args: argparse.Namespace) -> None:
+def execute_update_container_service_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Retrieves container_service JSON for each project and saves it to an output folder.
-    Output filename: <projectID>.container_service.json
+    Updates container-service wrapper config for each wrapper in each JSON file.
+    Each file should be named <project_id>.container_service.json and contain
+    multiple wrapper entries in ResultSet > Result.
     """
 
-    if not args.output_folder:
-        print("[ERROR]: --output_folder is required.")
+    if not args.input_folder:
+        print("[ERROR] --input_folder is required.")
         return
 
-    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
 
-    # Get project IDs
-    project_ids = []
-    if args.csv_file:
-        try:
-            with open(args.csv_file, mode='r') as file:
-                csv_reader = csv.reader(file, delimiter='\t')
-                project_ids = [row[0].strip() for row in csv_reader if row]
-        except Exception as e:
-            print(f"[ERROR] Failed to read CSV file: {e}")
-            return
-    else:
-        try:
-            all_projects = connection.get_json("/data/projects")
-            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
-        except Exception as e:
-            print(f"Failed to retrieve project list: {e}")
-            return
+    headers = {"Content-Type": "text/plain"}
 
-    for project_id in project_ids:
+    for file in sorted(input_path.glob("*.container_service.json")):
+        project_id = file.stem.replace(".container_service", "")
         try:
-            response = connection.get(f"/data/projects/{project_id}/config/container-service")
-            if response.status_code == 200:
-                json_data = response.json()
-                out_path = Path(args.output_folder) / f"{project_id}.container_service.json"
-                with open(out_path, "w", encoding="utf-8") as f:
-                    json.dump(json_data, f, indent=4)
-        except xnat.exceptions.XNATResponseError as e:
-            if "404" in str(e):
-                continue # Skip silently if container_service does not exist
-        except Exception as e:
-            print (F"[ERROR] {project_id}: {e}")
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-        print("[INFO] Service container JSON retrieval complete")
+            wrappers = data.get("ResultSet", {}).get("Result", [])
+            for wrapper in wrappers:
+                wrapper_path = wrapper.get("path")
+                contents = wrapper.get("contents", "").strip()
+
+                if not wrapper_path or not contents:
+                    print(f"[WARNING] Skipping missing wrapper info in {project_id}")
+                    continue
+
+                response = connection.put(
+                    f"/data/projects/{project_id}/config/container-service/{wrapper_path}",
+                    data=contents,
+                    headers=headers
+                )
+
+                if response.status_code in (200, 201, 204):
+                    print(f"[INFO] Updated wrapper '{wrapper_path}' for project {project_id}")
+                else:
+                    print(f"[ERROR] {project_id}/{wrapper_path}: HTTP {response.status_code} {response.text}")
+
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Container-service wrapper update complete.")
+
 
 def execute_get_session_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -1686,23 +1689,17 @@ def execute_get_session_xml(connection: XNATSession, args: argparse.Namespace) -
         print(f"[ERROR] Failed to read CSV: {e}")
         return
 
-    session_count = len(session_entries)
-    session_index = 0
     for row in session_entries:
-        session_index += 1
         if len(row) < 3:
             continue  # skip invalid rows
 
         project_id, subject_id, session_id = row[0], row[1], row[2]
 
         try:
-            Path(args.output_folder, project_id).mkdir(parents=True, exist_ok=True)
-            print(f"{session_index} / {session_count}  Project {project_id}  Subject {subject_id}  Session {session_id}  ")
             response = connection.get(f"/data/experiments/{session_id}?format=xml")
             response.raise_for_status()
 
-#            output_file = Path(args.output_folder, project_id) / f"{session_id}.xml"
-            output_file = Path(args.output_folder, project_id, f"{session_id}.xml")
+            output_file = Path(args.output_folder) / f"{session_id}.xml"
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(response.content.decode("utf-8"))
 
@@ -1766,6 +1763,51 @@ def execute_get_bids_json(connection: XNATSession, args: argparse.Namespace) -> 
 
     print("[INFO] BIDS JSON retrieval complete")
 
+def execute_get_container_service_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves container_service JSON for each project and saves it to an output folder.
+    Output filename: <projectID>.container_service.json
+    """
+
+    if not args.output_folder:
+        print("[ERROR]: --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/config/container-service")
+            if response.status_code == 200:
+                json_data = response.json()
+                out_path = Path(args.output_folder) / f"{project_id}.container_service.json"
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue # Skip silently if container_service does not exist
+        except Exception as e:
+            print (F"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Service container JSON retrieval complete")
 
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.subject_demographics_json:
@@ -1805,7 +1847,7 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
         return
 
     if args.container_service:
-        execute_get_container_service(connection, args)
+        execute_get_container_service_json(connection, args)
         return
 
     if args.session_json:

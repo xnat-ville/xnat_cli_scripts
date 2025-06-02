@@ -35,4 +35,4 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-update_bids_json "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" test_data/bids_json
+update_bids_json "$BASE_FOLDER" "$BOILER_PLATE" test_data/bids_json
