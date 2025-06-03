@@ -1664,7 +1664,6 @@ def execute_get_session_json(connection: XNATSession, args: argparse.Namespace) 
 
     print("[INFO] Session JSON retrieval completed successfully.")
 
-
 def execute_get_session_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves session XMLs based on a list of ProjectID, SubjectID, SessionID from a CSV/TXT file.
@@ -1812,6 +1811,55 @@ def execute_get_container_service_json(connection: XNATSession, args: argparse.N
 
     print("[INFO] Service container JSON retrieval complete")
 
+def execute_get_project_resources_list_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves project-level resource metadata JSON for each project and saves it to an output folder.
+    Output filename: <projectID>.resources.json
+
+    Uses /data/projects/{project}/resources?format=json
+    """
+
+    if not args.output_folder:
+        print("[ERROR]: --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/resources?format=json")
+            if response.status_code == 200:
+                json_data = response.json()
+                out_path = Path(args.output_folder) / f"{project_id}.resources.json"
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue  # Skip if resources not found
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Project resources JSON retrieval complete")
+
+
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.subject_demographics_json:
         execute_get_subject_demographics_json(connection, args)
@@ -1863,6 +1911,10 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
 
     if args.bids:
         execute_get_bids_json(connection, args)
+        return
+
+    if args.project_resources:
+        execute_get_project_resources_list_json(connection, args)
         return
 
     print("[ERROR] No valid 'GET' action specified.")
@@ -1996,6 +2048,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--tracer_json',     dest='tracer_json',              help="Retrieve tracer information for projects",   action='store_true')
     parser.add_argument(      '--configs',         dest='configs',                  help="Specify configs for list/get",               action='store_true')
     parser.add_argument(      '--resource_config', dest='resource_config',          help="Retrieve resource_config for projects",      action='store_true')
+    parser.add_argument(      '--project_resources', dest='project_resources',                 help="Any resources at project level",            action='store_true')
     parser.add_argument(      '--container_service',dest='container_service',       help="Retrieve container_service for projects",    action='store_true')
     parser.add_argument(       '--complete_subject_json',dest='complete_subject_json',help="Retrieve entire subject JSONs by session ID",        action='store_true')
     parser.add_argument(       '--session_json',   dest='session_json',             help="Retrieve session JSONs by session ID",       action='store_true')

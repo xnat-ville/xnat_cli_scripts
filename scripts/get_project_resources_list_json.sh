@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Arguments:
+#				Base Folder
+#				Boiler Plate
+#				Output Folder
+
+get_project_resources_list_json() {
+	export PYTHONPATH="$1/../src"
+
+	echo "python3 -m xnat_cli_scripts.projects $2 --get --project_resources --output_folder $3"
+	      python3 -m xnat_cli_scripts.projects $2 --get --project_resources --output_folder $3	
+}
+
+# Main Starts here
+# Arguments:
+#				authentication string (user or user:password)
+#				system (see common.sh)
+
+if [ $# -ne 2 ]; then
+	echo "Arguments: auth_string system"
+	exit 1
+fi
+
+auth_string="$1"
+system="$2"
+
+BASE_FOLDER=`dirname $0`
+source "$BASE_FOLDER/common.sh"
+set -e
+url=$(get_xnat_url "$system")
+set +e
+
+BOILER_PLATE=" -a $auth_string -x $url -e False "
+
+rm -rf test_data/project_resources
+get_project_resources_list_json "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/project_resources"
