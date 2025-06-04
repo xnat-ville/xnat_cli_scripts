@@ -5,7 +5,7 @@
 #				Boiler Plate
 #				Output Folder
 
-get_project_resources_list_json() {
+get_project_resources_json() {
 	export PYTHONPATH="$1/../src"
 
 	echo "python3 -m xnat_cli_scripts.projects $2 --get --project_resources --output_folder $3"
@@ -34,4 +34,4 @@ set +e
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 rm -rf test_data/project_resources
-get_project_resources_list_json "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/project_resources"
+get_project_resources_json "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/project_resources"
