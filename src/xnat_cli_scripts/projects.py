@@ -544,70 +544,49 @@ def execute_update_prearchive_code(connection: XNATSession, args: argparse.Names
 
 def execute_update_bids_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    NOTE: May require BIDS plugin to be installed and properly configured.
+    Updates the BIDS configuration for one or more XNAT projects.
 
-    Updates the BIDS configuration for one or more XNAT projects. 
-
-    Reads .bids.json files from the specified input folder. Each file should be named
-    as <project_id>.bids.json and contain a valid JSON object representing the BIDS
-    configuration for that project. Sends a PUT request to update the BIDS config via
-    /data/projects/{project}/config/bids.
-
-    Expects --input_folder and --csv flags to be provided.
+    Expects input files named <project_id>.bids.json in the input folder.
+    Each file should be a versioned BIDS config JSON object with a ResultSet.Result list.
     """
 
     if not args.input_folder:
         print("[ERROR]: --input_folder is required.")
         return
 
-    # Get project IDs
-    project_ids = []
-    if args.csv_file:
-        try:
-            with open(args.csv_file, mode='r') as file:
-                csv_reader = csv.reader(file, delimiter='\t')
-                project_ids = [row[0].strip() for row in csv_reader if row]
-        except Exception as e:
-            print(f"[ERROR] Failed to read CSV file: {e}")
-            return
-    else:
-        try:
-            all_projects = connection.get_json("/data/projects")
-            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
-        except Exception as e:
-            print(f"[ERROR] Failed to retrieve project list: {e}")
-            return
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
 
-    for project_id in project_ids:
-        file_path = Path(args.input_folder) / f"{project_id}.bids.json"
-        if not file_path.exists():
-            print(f"[WARNING] No file found for {project_id}")
-            continue
+    headers = {"Content-Type": "text/plain"}
 
+    for file in sorted(input_path.glob("*.bids.json")):
+        project_id = file.stem.replace(".bids", "")
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                bids_data = json.load(f)
-        except Exception as e:
-            print(f"[ERROR] Failed to parse {file_path}: {e}")
-            continue
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-        try:
+            latest = find_most_recent_version(data.get("ResultSet", {}).get("Result", []))
+            if not latest or not latest.get("contents"):
+                print(f"[WARNING] No valid config contents found for {project_id}")
+                continue
+
             response = connection.put(
                 f"/data/projects/{project_id}/config/bids",
-                json=bids_data,
-                headers={
-                    "Content-Type": "application/json",
-                    "Accept": "application/json"
-                }
+                data=latest["contents"].strip(),
+                headers=headers
             )
-            if response.status_code in [200, 201]:
-                print(f"[SUCCESS] BIDS config updated for {project_id}")
+
+            if response.status_code in (200, 201, 204):
+                print(f"[SUCCESS] BIDS config updated for {project_id} (version {latest.get('version')})")
             else:
-                print(f"[ERROR] {project_id} failed: {response.status_code} {response.text}")
+                print(f"[ERROR] Failed to update {project_id}: HTTP {response.status_code} {response.text}")
+
         except Exception as e:
             print(f"[ERROR] {project_id}: {e}")
 
-    print("[INFO] BIDS update complete")
+    print("[INFO] BIDS config update complete.")
 
 def execute_update_resource_config_json(connection: XNATSession, args: argparse.Namespace) -> None:
     if not args.input_folder:
