@@ -3,13 +3,15 @@
 # Arguments:
 #              Base Folder
 #              Boiler Plate
-#              Output folder
+#              Input folder
 
-get_downloader_json() {
+# NOTE: endpoint only available if you have pipelines plugin installed and properly configured.
+
+update_pipeline_json() {
     export PYTHONPATH="$1/../src"
 
-    echo "python3 -m xnat_cli_scripts.projects $2 --get --downloader --output_folder $3"
-          python3 -m xnat_cli_scripts.projects $2 --get --downloader --output_folder $3
+    echo "python3 -m xnat_cli_scripts.projects $2 --update --pipelines --input_folder $3"
+          python3 -m xnat_cli_scripts.projects $2 --update --pipelines --input_folder $3
 }
 
 # Main starts here
@@ -33,5 +35,4 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-rm -rf test_data/downloader_json
-get_downloader_json "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/downloader_json"
+update_pipeline_json "$BASE_FOLDER" "$BOILER_PLATE" test_data/pipeline_json

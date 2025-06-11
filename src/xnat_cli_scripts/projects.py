@@ -631,6 +631,52 @@ def execute_update_resource_config_json(connection: XNATSession, args: argparse.
     if not had_error: 
         print("[INFO] Resource config JSON update complete.")
 
+def execute_update_pipelines_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates the pipelines configuration for one or more XNAT projects.
+
+    Expects input files named <project_id>.pipelines.json in the input folder.
+    Each file should be a versioned pipelines config JSON object with a ResultSet.Result list.
+    """
+
+    if not args.input_folder:
+        print("[ERROR]: --input_folder is required.")
+        return
+
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
+
+    headers = {"Content-Type": "text/plain"}
+
+    for file in sorted(input_path.glob("*.pipelines.json")):
+        project_id = file.stem.replace(".pipelines", "")
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            latest = find_most_recent_version(data.get("ResultSet", {}).get("Result", []))
+            if not latest or not latest.get("contents"):
+                print(f"[WARNING] No valid config contents found for {project_id}")
+                continue
+
+            response = connection.put(
+                f"/data/projects/{project_id}/config/pipelines",
+                data=latest["contents"].strip(),
+                headers=headers
+            )
+
+            if response.status_code in (200, 201, 204):
+                print(f"[SUCCESS] Pipelines config updated for {project_id} (version {latest.get('version')})")
+            else:
+                print(f"[ERROR] Failed to update {project_id}: HTTP {response.status_code} {response.text}")
+
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Pipelines config update complete.")
+
 def execute_list_project_accessibilities(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Lists project accessibilities (private/public/protected).
@@ -1204,6 +1250,8 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         execute_update_container_service_json(connection, args)
     elif args.downloader:
         execute_update_downloader_json(connection, args)
+    elif args.pipelines:
+        execute_update_pipelines_json(connection, args)
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 

@@ -5,8 +5,6 @@
 #              Boiler Plate
 #              Output folder
 
-# NOTE: endpoint only available if you have pipelines plugin installed and properly configured.
-
 get_pipeline_json() {
     export PYTHONPATH="$1/../src"
 
