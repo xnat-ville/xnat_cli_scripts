@@ -2027,6 +2027,53 @@ def execute_get_downloader_config_json(connection: XNATSession, args: argparse.N
 
     print("[INFO] Downloader JSON retrieval complete")
 
+def execute_get_project_config_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves project configuration JSON for each project and saves it to an output folder.
+    Output filename: <projectID>.project.json
+
+    Uses /data/projects/{project}/config/project
+    """
+    if not args.output_folder:
+        print("[ERROR]: --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/config/project")
+            if response.status_code == 200:
+                json_data = response.json()
+                out_path = Path(args.output_folder) / f"{project_id}.project.json"
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue  # Project config might not exist
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Project JSON retrieval complete")
+
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.subject_demographics_json:
         execute_get_subject_demographics_json(connection, args)
@@ -2090,6 +2137,10 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
 
     if args.pipelines:
         execute_get_pipelines_json(connection, args)
+        return
+
+    if args.project_config:
+        execute_get_project_config_json(connection, args)
         return
 
     print("[ERROR] No valid 'GET' action specified.")
@@ -2232,6 +2283,7 @@ if __name__ == "__main__":
     parser.add_argument(       '--bids',           dest='bids',                     help="Interacts with XNAT BIDS configuration",     action='store_true')
     parser.add_argument(       '--downloader',     dest='downloader',               help="Interacts with XNAT downloader configuration", action='store_true')
     parser.add_argument(       '--pipelines',      dest='pipelines',                help="Interacts with XNAT pipelines configuration",  action='store_true')
+    parser.add_argument(       '--project_config', dest='project_config',           help="Interacts with XNAT project config",          action='store_true')
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
