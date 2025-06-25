@@ -815,6 +815,52 @@ def execute_update_split_petmr_sessions_json(connection: XNATSession, args: argp
 
     print("[INFO] SplitPetMrSessions config update complete.")
 
+def execute_update_scan_quality_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates the scan-quality configuration for one or more XNAT projects.
+
+    Expects input files named <project_id>.scan-quality.json in the input folder.
+    Each file should be a versioned config JSON object with a ResultSet.Result list.
+    """
+
+    if not args.input_folder:
+        print("[ERROR]: --input_folder is required.")
+        return
+
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
+
+    headers = {"Content-Type": "text/plain"}
+
+    for file in sorted(input_path.glob("*.scan-quality.json")):
+        project_id = file.stem.replace(".scan-quality", "")
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            latest = find_most_recent_version(data.get("ResultSet", {}).get("Result", []))
+            if not latest or not latest.get("contents"):
+                print(f"[WARNING] No valid config contents found for {project_id}")
+                continue
+
+            response = connection.put(
+                f"/data/projects/{project_id}/config/scan-quality",
+                data=latest["contents"].strip(),
+                headers=headers
+            )
+
+            if response.status_code in (200, 201, 204):
+                print(f"[SUCCESS] scan-quality config updated for {project_id}")
+            else:
+                print(f"[ERROR] Failed to update {project_id}: HTTP {response.status_code} {response.text}")
+
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] scan-quality config update complete.")
+
 def execute_list_project_accessibilities(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Lists project accessibilities (private/public/protected).
@@ -1396,6 +1442,8 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         execute_update_separate_petmr_json(connection,args)
     elif args.split_petmr_sessions:
         execute_update_split_petmr_sessions_json(connection,args)
+    elif args.scan_quality:
+        execute_update_scan_quality_json(connection,args)
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
@@ -1830,6 +1878,54 @@ def execute_get_split_petmr_sessions_json(connection: XNATSession, args: argpars
             print(f"[ERROR] {project_id}: {e}")
 
     print("[INFO] SplitPetMrSessions JSON retrieval complete")
+
+def execute_get_scan_quality_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves scan-quality configuration for each project and saves it to an output folder.
+    Output filename: <projectID>.scan-quality.json
+
+    Uses /data/projects/{project_id}/config/scan-quality
+    """
+
+    if not args.output_folder:
+        print("[ERROR]: --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/config/scan-quality")
+            if response.status_code == 200:
+                json_data = response.json()
+                out_path = Path(args.output_folder) / f"{project_id}.scan-quality.json"
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] scan-quality JSON retrieval complete")
 
 def execute_update_container_service_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -2393,6 +2489,10 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
         execute_get_split_petmr_sessions_json(connection, args)
         return
 
+    if args.scan_quality:
+        execute_get_scan_quality_json(connection,args)
+        return
+
     print("[ERROR] No valid 'GET' action specified.")
 
 
@@ -2535,6 +2635,7 @@ if __name__ == "__main__":
     parser.add_argument(       '--project_config', dest='project_config',           help="Interacts with XNAT project config",          action='store_true')
     parser.add_argument(       '--separate_petmr', dest='separate_petmr',           help="Interacts with separate petmr project config", action='store_true')
     parser.add_argument(       '--split_petmr_sessions', dest='split_petmr_sessions', help="Interacts with split petmr project config", action='store_true')
+    parser.add_argument(       '--scan_quality',   dest='scan_quality',             help="Interacts with split petmr project config",   action='store_true')
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
