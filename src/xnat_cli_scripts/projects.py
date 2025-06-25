@@ -769,6 +769,52 @@ def execute_update_separate_petmr_json(connection: XNATSession, args: argparse.N
 
     print("[INFO] separatePETMR config update complete.")
 
+def execute_update_split_petmr_sessions_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates the SplitPetMrSessions configuration for one or more XNAT projects.
+
+    Expects input files named <project_id>.SplitPetMrSessions.json in the input folder.
+    Each file should be a versioned config JSON object with a ResultSet.Result list.
+    """
+
+    if not args.input_folder:
+        print("[ERROR]: --input_folder is required.")
+        return
+
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
+
+    headers = {"Content-Type": "text/plain"}
+
+    for file in sorted(input_path.glob("*.SplitPetMrSessions.json")):
+        project_id = file.stem.replace(".SplitPetMrSessions", "")
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            latest = find_most_recent_version(data.get("ResultSet", {}).get("Result", []))
+            if not latest or not latest.get("contents"):
+                print(f"[WARNING] No valid config contents found for {project_id}")
+                continue
+
+            response = connection.put(
+                f"/data/projects/{project_id}/config/SplitPetMrSessions",
+                data=latest["contents"].strip(),
+                headers=headers
+            )
+
+            if response.status_code in (200, 201, 204):
+                print(f"[SUCCESS] SplitPetMrSessions config updated for {project_id}")
+            else:
+                print(f"[ERROR] Failed to update {project_id}: HTTP {response.status_code} {response.text}")
+
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] SplitPetMrSessions config update complete.")
+
 def execute_list_project_accessibilities(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Lists project accessibilities (private/public/protected).
@@ -1348,6 +1394,8 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         execute_update_project_config_json(connection,args)
     elif args.separate_petmr:
         execute_update_separate_petmr_json(connection,args)
+    elif args.split_petmr_sessions:
+        execute_update_split_petmr_sessions_json(connection,args)
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
