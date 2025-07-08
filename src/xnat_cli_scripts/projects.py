@@ -2546,6 +2546,29 @@ def execute_session_list(connection: XNATSession, args: argparse.Namespace) -> N
             for experiment in po.experiments.values():
                 print(f"{project_header} {format_session_data(experiment)}")
 
+
+def is_shared_session(project_id:str, session_json:{}) -> bool:
+    my_items = session_json["items"]
+    for item in my_items:
+        if "data_fields" in item:
+            my_data_fields = item["data_fields"]
+            if "project" in my_data_fields:
+                my_project = my_data_fields["project"]
+                return (project_id != my_project)
+
+
+    return True
+
+def extract_session_label(session_json:{}) -> str:
+    my_items = session_json["items"]
+    for item in my_items:
+        if "data_fields" in item:
+            my_data_fields = item["data_fields"]
+            if "label" in my_data_fields:
+                return my_data_fields["label"]
+    return "Unknown_session_label"
+
+
 def execute_list_subjects_sessions(connection: XNATSession, args: argparse.Namespace) -> None:
     project_ids = get_project_ids(connection, args)
     tab="\t"
@@ -2564,10 +2587,15 @@ def execute_list_subjects_sessions(connection: XNATSession, args: argparse.Names
             try:
                 for experiment in subject.experiments:
 #                    exp_path = f"/data/projects/{id}/subjects/{subject}/experiments/{experiment}"
-#                    exp_path = f"/data/experiments/{experiment}"
-#                    exp_json = connection.get_json(exp_path)
-#                    data_type=exp_json['items'][0]['meta']['xsi:type']
-                    print(f"{id}{tab}{subject.id}{tab}{experiment}")
+                    exp_path = f"/data/experiments/{experiment}"
+                    exp_json = connection.get_json(exp_path)
+                    if (args.exclude_shares and is_shared_session(id, exp_json)):
+                        continue
+                    exp_label_to_print = experiment
+                    if (args.print_session_label):
+                        exp_label_to_print = extract_session_label(exp_json)
+                    data_type=exp_json['items'][0]['meta']['xsi:type']
+                    print(f"{id}{tab}{subject.id}{tab}{exp_label_to_print}")
 #                    print(f"{id}{tab}{subject.id}{tab}{experiment}{tab}{exp.__xsi_type__}")
             except Exception as e:
                 xnat_cli_scripts.cli_common.print_stderr(f"[ERROR] Exception for project {id} subject {subject.id}: {e}")
@@ -2583,6 +2611,11 @@ def execute_list_experiments(connection: XNATSession, args: argparse.Namespace):
     for project_id in project_ids:
         experiments = connection.get_json(f"/data/projects/{project_id}/experiments")
         for experiment in experiments['ResultSet']['Result']:
+            exp_path = f"/data/experiments/{experiment['ID']}"
+            xnat_cli_scripts.cli_common.print_stderr(exp_path)
+            exp_json = connection.get_json(exp_path)
+            if (args.exclude_shares and is_shared_session(project_id, exp_json)):
+                continue
             print(f"{project_id}{tab}{experiment['label']}{tab}{experiment['ID']}")
 
 
@@ -2641,6 +2674,8 @@ if __name__ == "__main__":
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
     parser.add_argument('-s', '--sleep',           dest='sleep',                    help="Time to sleep after each REST call")
     parser.add_argument('-v', '--verbose',         dest='verbose',                  help="Verbose mode",                               action='store_true')
+    parser.add_argument(      '--exclude_shares',  dest='exclude_shares',           help="Exclude (destination) shared items",         action='store_true')
+    parser.add_argument(      '--print_session_label', dest='print_session_label',  help="Print session label rather than accession number", action='store_true')
     parser.add_argument(      '--csv',             dest='csv_file',                 help='Path to CSV file operations such as listing, removing, or changing groups')
     parser.add_argument(  '--csv_projects_subjects', dest='csv_projects_subjects_file',  help="Path to CSV with project/subject ID tuplets")
     parser.add_argument(      '--input_folder',    dest='input_folder',             help='Path to input folder of files')
