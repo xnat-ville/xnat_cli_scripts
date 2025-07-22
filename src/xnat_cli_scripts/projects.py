@@ -2189,7 +2189,6 @@ def execute_get_session_xml(connection: XNATSession, args: argparse.Namespace) -
 
     print("[INFO] Session XML retrieval completed successfully.")
 
-<<<<<<< HEAD
 def execute_get_subject_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves subject XMLs based on a list of ProjectID, SubjectID, SessionID from a CSV/TXT file.
@@ -2249,8 +2248,6 @@ def execute_get_subject_xml(connection: XNATSession, args: argparse.Namespace) -
     print("[INFO] Subject XML retrieval completed successfully.")
 
 
-=======
->>>>>>> 9e3ba46123edef6e9a63f79f8a54cf96b0cd2730
 def execute_get_bids_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves BIDS configuration JSON for each project and saves it to an output folder.
