@@ -35,16 +35,16 @@ do
    projId=`echo $justFile | cut -d. -f1`
    while read unusedData
    do 
-      echo "protStartLine= cat $newFile | grep -n '<xnat:studyProtocol ID=\"${projId}_${unusedData}\"' | cut -d: -f1"
+#      echo "protStartLine= cat $newFile | grep -n '<xnat:studyProtocol ID=\"${projId}_${unusedData}\"' | cut -d: -f1"
             protStartLine=`cat $newFile | grep -n "<xnat:studyProtocol ID=\"${projId}_${unusedData}\"" | cut -d: -f1`
-      echo Protocol Start Line: $protStartLine
+#      echo Protocol Start Line: $protStartLine
       if [ ! -z ${protStartLine} ]; then
          nextProtClose=`tail -n +${protStartLine} $newFile | grep -n '</xnat:studyProtocol>' | head -1 | cut -d: -f1`
          let protEndLine=${protStartLine}+${nextProtClose}-1
-         echo $protEndLine
+#         echo $protEndLine
          if [ ! -z "$protStartLine" ] && [ ! -z "$protEndLine" ]; then
             if [ ${protEndLine} -gt ${protStartLine} ]; then
-               echo "sed -i bak '${protStartLine},${protEndLine}d' $newFile"
+#               echo "sed -i bak '${protStartLine},${protEndLine}d' $newFile"
                      sed -i bak "${protStartLine},${protEndLine}d" $newFile 
             else
                echo "Skipped, protocol end line ${protEndLine} is not larger than protocol start line ${protStartLine}"

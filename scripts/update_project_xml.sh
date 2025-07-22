@@ -36,4 +36,4 @@ BOILER_PLATE=" -a $auth_string -x $url -e False "
 update_project_xml	\
     "$BASE_FOLDER"	\
     "$BOILER_PLATE --csv test_data/active_projects.txt --template templates/template_project_xml.xml"	\
-    test_data/processed_active_project_xml
+    test_data/project_xml_processed
