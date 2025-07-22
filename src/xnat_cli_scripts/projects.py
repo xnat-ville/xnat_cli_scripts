@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 import os
 from os import listdir
+import xml.etree.ElementTree as ET
 import xnat.mixin
 from requests import RequestException
 from xnat.session import XNATSession
@@ -867,6 +868,107 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
         print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}")
 
 
+def execute_update_subject_xml(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Update/upload subject XML by reading XML for individual files in an input folder.
+    """
+
+    if args.input_folder is None:
+        raise Exception("projects --update --subject_xml requires --input_folder")
+
+    print(f"Update subject xml {args.input_folder}")
+
+    project_ids = get_project_ids(connection, args)
+    try:
+        http_headers = {}
+        http_headers['Content-Type'] = 'application/xml'
+        project_count = len(project_ids)
+        project_index = 1
+        response = ""
+        file_path="XX"
+        for id in project_ids:
+            if (not id.startswith("#")):
+                project_folder=f"{args.input_folder}/{id}"
+                print(f"Project folder {project_folder}")
+                if (os.path.exists(project_folder)):
+                    folder_listing = listdir(project_folder)
+                    file_index = 1
+                    file_count = len(folder_listing)
+                    for f in folder_listing:
+                        file_path = f"{project_folder}/{f}"
+                        subject_tree = ET.parse(file_path)
+                        subject_root = subject_tree.getroot()
+                        subject_project = subject_root.attrib['project']
+                        subject_id = subject_root.attrib['ID']
+                        if id == subject_project:
+                            print(f"{file_path} {subject_project}")
+                            with open(file_path) as xml_file:
+                                put_path = f"/data/projects/{id}/subjects/{subject_id}"
+                                print(f"{project_index} / {project_count}  {file_index} / {file_count}  {put_path}")
+                                response = connection.put(put_path, data=xml_file, headers=http_headers)
+                                print(response)
+                                xml_file.close()
+                        else:
+                            print(f"{project_index} / {project_count}  {file_index} / {file_count} SKIP {id} {subject_project}")
+                        file_index += 1
+#
+#
+
+
+                else:
+                    xnat_cli_scripts.cli_common.print_stderr(f"Project folder not found at expected path: {project_folder}")
+
+            project_index += 1
+    except Exception as e:
+        print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}")
+
+
+def execute_update_session_xml(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Update/upload project XML by reading XML for individual files in an input folder.
+    """
+
+    if args.input_folder is None:
+        raise Exception("projects --update --project_xml requires --input_folder")
+
+    project_ids = get_project_ids(connection, args)
+    try:
+        http_headers = {}
+        http_headers['Content-Type'] = 'application/xml'
+        project_count = len(project_ids)
+        project_index = 1
+        response = ""
+        file_path="XX"
+        for id in project_ids:
+            if (not id.startswith("#")):
+                project_folder=f"{args.input_folder}/{id}"
+                if (os.path.exists(project_folder)):
+                    folder_listing = listdir(project_folder)
+                    file_index = 1
+                    file_count = len(folder_listing)
+                    for f in folder_listing:
+                        file_path = f"{project_folder}/{f}"
+                        with open(file_path) as xml_file:
+                            put_path = f"/data/projects/{id}"
+                            print(f"{project_index} / {project_count}  {file_index} / {file_count}  {put_path}")
+                            file_index += 1
+                            response = connection.put(put_path, data=xml_file, headers=http_headers)
+                            print(response)
+                            xml_file.close()
+
+                else:
+                    xnat_cli_scripts.cli_common.print_stderr(f"Project folder not found at expected path: {project_folder}")
+
+#                with open(file_path) as xml_file:
+#                    put_path = f"/data/projects/{id}"
+#                    print(f"Upload project XML: {put_path}")
+#                    response=connection.put(put_path, data=xml_file, headers=http_headers)
+#                    xml_file.close()
+            project_index += 1
+    except Exception as e:
+        print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}")
+
+
 
 def execute_update_tracer_json(connection, args):
     """
@@ -1168,6 +1270,10 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
             execute_update_project_xml(connection, args)
         else:
             print("[WARNING] No input folder provided for project XML update.")
+    elif args.subject_xml:
+        execute_update_subject_xml(connection, args)
+    elif args.session_xml:
+        execute_update_session_xml(connection, args)
     elif args.tracer_json:
         execute_update_tracer_json(connection, args)
     elif args.prearchive_code:
@@ -1705,10 +1811,13 @@ def execute_get_session_xml(connection: XNATSession, args: argparse.Namespace) -
             output_file = Path(args.output_folder, project_id, f"{session_id}.xml")
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(response.content.decode("utf-8"))
+                f.close()
+            apply_sleep(args)
 
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
-                pass  # skip missing sessions silently
+                xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: 404 Error for session {session_id}: {e}")
+#                pass  # skip missing sessions silently
             else:
                 xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: Failed to retrieve session {session_id}: {e}")
         except Exception as e:
@@ -1716,6 +1825,63 @@ def execute_get_session_xml(connection: XNATSession, args: argparse.Namespace) -
 
     print("[INFO] Session XML retrieval completed successfully.")
 
+def execute_get_subject_xml(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves subject XMLs based on a list of ProjectID, SubjectID, SessionID from a CSV/TXT file.
+    Saves each session XML to test_data/session_xml/{SessionID}.xml
+    """
+    if not args.csv_file:
+        print("[ERROR] --csv is required to get subject XMLs.")
+        return
+
+    if not args.output_folder:
+        print("[ERROR] --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+
+    try:
+        with open(args.csv_file, mode='r') as file:
+            csv_reader = csv.reader(file, delimiter='\t')
+            subject_entries = [row for row in csv_reader if row]
+    except Exception as e:
+        print(f"[ERROR] Failed to read CSV: {e}")
+        return
+
+    subject_count = len(subject_entries)
+    print(f"Number of subject entries: {subject_count}")
+    subject_index = 0
+
+    for row in subject_entries:
+        subject_index += 1
+        if len(row) != 2:
+            xnat_cli_scripts.cli_common.print_stderr(f"Bad row in subject list {row}")
+            exit(1)
+
+        project_id, subject_id = row[0], row[1]
+
+        try:
+            Path(args.output_folder, project_id).mkdir(parents=True, exist_ok=True)
+            print(f"{subject_index} / {subject_count}  Project {project_id}  Subject {subject_id}  ")
+            response = connection.get(f"/data/projects/{project_id}/subjects/{subject_id}?format=xml")
+            response.raise_for_status()
+
+            output_file = Path(args.output_folder, project_id, f"{subject_id}.xml")
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(response.content.decode("utf-8"))
+                f.close()
+            apply_sleep(args)
+
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: 404 Error for subject {project_id} / {subject_id}: {e}")
+            else:
+                xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: Failed to retrieve subject {project_id} / {subject_id}: {e}")
+        except Exception as e:
+            xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: Unexpected error for subject {project_id} / {subject_id}: {e}")
+
+    print("[INFO] Subject XML retrieval completed successfully.")
 
 
 def execute_get_bids_json(connection: XNATSession, args: argparse.Namespace) -> None:
@@ -1814,6 +1980,10 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
 
     if args.session_xml:
         execute_get_session_xml(connection, args)
+        return
+
+    if args.subject_xml:
+        execute_get_subject_xml(connection, args)
         return
 
     if args.bids:
@@ -1955,6 +2125,7 @@ if __name__ == "__main__":
     parser.add_argument(       '--complete_subject_json',dest='complete_subject_json',help="Retrieve entire subject JSONs by session ID",        action='store_true')
     parser.add_argument(       '--session_json',   dest='session_json',             help="Retrieve session JSONs by session ID",       action='store_true')
     parser.add_argument(       '--session_xml',    dest='session_xml',              help="Retrieve session XML files by session ID",   action='store_true')
+    parser.add_argument(       '--subject_xml',    dest='subject_xml',              help="Retrieve subject XML files by session ID",   action='store_true')
     parser.add_argument(       '--experiments',    dest='experiments',              help="Include experiments in output list",         action='store_true')
     parser.add_argument(       '--bids',           dest='bids',                     help="Interacts with XNAT BIDS configuration",     action='store_true')
 
