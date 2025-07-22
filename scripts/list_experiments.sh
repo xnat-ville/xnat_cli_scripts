@@ -17,13 +17,14 @@ list_experiments() {
 #               authentication string (user or user:password)
 #               system (see common.sh)
 
-if [ $# -ne 2 ]; then
-    echo "Arguments: auth_string system"
+if [ $# -lt 2 ]; then
+    echo "Arguments: auth_string system [optional flags]"
     exit 1
 fi
 
 auth_string="$1"
 system="$2"
+shift 2
 
 BASE_FOLDER=$(dirname "$0")
 source "$BASE_FOLDER/common.sh"
@@ -31,7 +32,7 @@ set -e
 url=$(get_xnat_url "${system}")
 set +e
 
-BOILER_PLATE=" -a $auth_string -x $url -e False "
+BOILER_PLATE=" -a $auth_string -x $url -e False $*"
 
 mkdir -p test_data
 list_experiments "$BASE_FOLDER" "$BOILER_PLATE" test_data/experiments.txt

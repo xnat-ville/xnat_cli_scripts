@@ -5,11 +5,11 @@
 #              Boiler Plate
 #              Output folder
 
-get_investigator_json_files() {
+get_downloader_json() {
     export PYTHONPATH="$1/../src"
 
-    echo python3 -m xnat_cli_scripts.investigators $2 --get --investigator_json --output_folder $3 
-         python3 -m xnat_cli_scripts.investigators $2 --get --investigator_json --output_folder $3
+    echo "python3 -m xnat_cli_scripts.projects $2 --get --downloader --output_folder $3"
+          python3 -m xnat_cli_scripts.projects $2 --get --downloader --output_folder $3
 }
 
 # Main starts here
@@ -33,4 +33,5 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-get_investigator_json_files "$BASE_FOLDER" "$BOILER_PLATE" "test_data/investigator_json"
+rm -rf test_data/downloader_json
+get_downloader_json "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/downloader_json"

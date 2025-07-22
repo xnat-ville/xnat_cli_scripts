@@ -3,13 +3,13 @@
 # Arguments:
 #              Base Folder
 #              Boiler Plate
-#              Output folder
+#              Input folder
 
-get_investigator_json_files() {
+update_scan_quality_json() {
     export PYTHONPATH="$1/../src"
 
-    echo python3 -m xnat_cli_scripts.investigators $2 --get --investigator_json --output_folder $3 
-         python3 -m xnat_cli_scripts.investigators $2 --get --investigator_json --output_folder $3
+    echo "python3 -m xnat_cli_scripts.projects $2 --update --scan_quality --input_folder $3"
+          python3 -m xnat_cli_scripts.projects $2 --update --scan_quality --input_folder $3
 }
 
 # Main starts here
@@ -33,4 +33,4 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-get_investigator_json_files "$BASE_FOLDER" "$BOILER_PLATE" "test_data/investigator_json"
+update_scan_quality_json "$BASE_FOLDER" "$BOILER_PLATE" test_data/scan_quality_json

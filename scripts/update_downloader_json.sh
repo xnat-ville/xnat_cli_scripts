@@ -3,13 +3,13 @@
 # Arguments:
 #              Base Folder
 #              Boiler Plate
-#              Output folder
+#              Input folder
 
-get_investigator_json_files() {
+update_downloader_json() {
     export PYTHONPATH="$1/../src"
 
-    echo python3 -m xnat_cli_scripts.investigators $2 --get --investigator_json --output_folder $3 
-         python3 -m xnat_cli_scripts.investigators $2 --get --investigator_json --output_folder $3
+    echo "python3 -m xnat_cli_scripts.projects $2 --update --downloader --input_folder $3"
+          python3 -m xnat_cli_scripts.projects $2 --update --downloader --input_folder $3
 }
 
 # Main starts here
@@ -25,12 +25,12 @@ fi
 auth_string="$1"
 system="$2"
 
-BASE_FOLDER=`dirname $0`
+BASE_FOLDER=$(dirname "$0")
 source "$BASE_FOLDER/common.sh"
 set -e
-url=$(get_xnat_url ${system})
+url=$(get_xnat_url "${system}")
 set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-get_investigator_json_files "$BASE_FOLDER" "$BOILER_PLATE" "test_data/investigator_json"
+update_downloader_json "$BASE_FOLDER" "$BOILER_PLATE" test_data/downloader_json

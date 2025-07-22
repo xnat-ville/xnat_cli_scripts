@@ -33,4 +33,4 @@ set +e
 
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
-update_anon_scripts_json_files "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/anon_scripts_json"
+update_anon_scripts_json_files "$BASE_FOLDER" "$BOILER_PLATE" "test_data/anon_scripts_json"

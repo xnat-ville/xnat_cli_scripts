@@ -36,4 +36,4 @@ set +e
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 rm -rf test_data/bids_json
-get_bids_json "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/bids_projects.txt" "test_data/bids_json"
+get_bids_json "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/active_projects.txt" "test_data/bids_json"

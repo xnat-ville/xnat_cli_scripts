@@ -545,70 +545,49 @@ def execute_update_prearchive_code(connection: XNATSession, args: argparse.Names
 
 def execute_update_bids_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    NOTE: May require BIDS plugin to be installed and properly configured.
+    Updates the BIDS configuration for one or more XNAT projects.
 
-    Updates the BIDS configuration for one or more XNAT projects. 
-
-    Reads .bids.json files from the specified input folder. Each file should be named
-    as <project_id>.bids.json and contain a valid JSON object representing the BIDS
-    configuration for that project. Sends a PUT request to update the BIDS config via
-    /data/projects/{project}/config/bids.
-
-    Expects --input_folder and --csv flags to be provided.
+    Expects input files named <project_id>.bids.json in the input folder.
+    Each file should be a versioned BIDS config JSON object with a ResultSet.Result list.
     """
 
     if not args.input_folder:
         print("[ERROR]: --input_folder is required.")
         return
 
-    # Get project IDs
-    project_ids = []
-    if args.csv_file:
-        try:
-            with open(args.csv_file, mode='r') as file:
-                csv_reader = csv.reader(file, delimiter='\t')
-                project_ids = [row[0].strip() for row in csv_reader if row]
-        except Exception as e:
-            print(f"[ERROR] Failed to read CSV file: {e}")
-            return
-    else:
-        try:
-            all_projects = connection.get_json("/data/projects")
-            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
-        except Exception as e:
-            print(f"[ERROR] Failed to retrieve project list: {e}")
-            return
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
 
-    for project_id in project_ids:
-        file_path = Path(args.input_folder) / f"{project_id}.bids.json"
-        if not file_path.exists():
-            print(f"[WARNING] No file found for {project_id}")
-            continue
+    headers = {"Content-Type": "text/plain"}
 
+    for file in sorted(input_path.glob("*.bids.json")):
+        project_id = file.stem.replace(".bids", "")
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                bids_data = json.load(f)
-        except Exception as e:
-            print(f"[ERROR] Failed to parse {file_path}: {e}")
-            continue
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-        try:
+            latest = find_most_recent_version(data.get("ResultSet", {}).get("Result", []))
+            if not latest or not latest.get("contents"):
+                print(f"[WARNING] No valid config contents found for {project_id}")
+                continue
+
             response = connection.put(
                 f"/data/projects/{project_id}/config/bids",
-                json=bids_data,
-                headers={
-                    "Content-Type": "application/json",
-                    "Accept": "application/json"
-                }
+                data=latest["contents"].strip(),
+                headers=headers
             )
-            if response.status_code in [200, 201]:
-                print(f"[SUCCESS] BIDS config updated for {project_id}")
+
+            if response.status_code in (200, 201, 204):
+                print(f"[SUCCESS] BIDS config updated for {project_id} (version {latest.get('version')})")
             else:
-                print(f"[ERROR] {project_id} failed: {response.status_code} {response.text}")
+                print(f"[ERROR] Failed to update {project_id}: HTTP {response.status_code} {response.text}")
+
         except Exception as e:
             print(f"[ERROR] {project_id}: {e}")
 
-    print("[INFO] BIDS update complete")
+    print("[INFO] BIDS config update complete.")
 
 def execute_update_resource_config_json(connection: XNATSession, args: argparse.Namespace) -> None:
     if not args.input_folder:
@@ -652,6 +631,236 @@ def execute_update_resource_config_json(connection: XNATSession, args: argparse.
 
     if not had_error: 
         print("[INFO] Resource config JSON update complete.")
+
+def execute_update_pipelines_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates the pipelines configuration for one or more XNAT projects.
+
+    Expects input files named <project_id>.pipelines.json in the input folder.
+    Each file should be a versioned pipelines config JSON object with a ResultSet.Result list.
+    """
+
+    if not args.input_folder:
+        print("[ERROR]: --input_folder is required.")
+        return
+
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
+
+    headers = {"Content-Type": "text/plain"}
+
+    for file in sorted(input_path.glob("*.pipelines.json")):
+        project_id = file.stem.replace(".pipelines", "")
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            latest = find_most_recent_version(data.get("ResultSet", {}).get("Result", []))
+            if not latest or not latest.get("contents"):
+                print(f"[WARNING] No valid config contents found for {project_id}")
+                continue
+
+            response = connection.put(
+                f"/data/projects/{project_id}/config/pipelines",
+                data=latest["contents"].strip(),
+                headers=headers
+            )
+
+            if response.status_code in (200, 201, 204):
+                print(f"[SUCCESS] Pipelines config updated for {project_id} (version {latest.get('version')})")
+            else:
+                print(f"[ERROR] Failed to update {project_id}: HTTP {response.status_code} {response.text}")
+
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Pipelines config update complete.")
+
+def execute_update_project_config_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates the project config JSON for one or more XNAT projects.
+
+    Expects input files named <project_id>.project.json in the input folder.
+    Each file should be a versioned config JSON object with a ResultSet.Result list.
+    """
+
+    if not args.input_folder:
+        print("[ERROR]: --input_folder is required.")
+        return
+
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
+
+    headers = {"Content-Type": "text/plain"}
+
+    for file in sorted(input_path.glob("*.project.json")):
+        project_id = file.stem.replace(".project", "")
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            latest = find_most_recent_version(data.get("ResultSet", {}).get("Result", []))
+            if not latest or not latest.get("contents"):
+                print(f"[WARNING] No valid config contents found for {project_id}")
+                continue
+
+            response = connection.put(
+                f"/data/projects/{project_id}/config/project",
+                data=latest["contents"].strip(),
+                headers=headers
+            )
+
+            if response.status_code in (200, 201, 204):
+                print(f"[SUCCESS] Project config updated for {project_id} (version {latest.get('version')})")
+            else:
+                print(f"[ERROR] Failed to update {project_id}: HTTP {response.status_code} {response.text}")
+
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Project config update complete.")
+
+def execute_update_separate_petmr_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates the separatePETMR configuration for one or more XNAT projects.
+
+    Expects input files named <project_id>.separatePETMR.json in the input folder.
+    Each file should be a versioned config JSON object with a ResultSet.Result list.
+    """
+
+    if not args.input_folder:
+        print("[ERROR]: --input_folder is required.")
+        return
+
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
+
+    headers = {"Content-Type": "text/plain"}
+
+    for file in sorted(input_path.glob("*.separatePETMR.json")):
+        project_id = file.stem.replace(".separatePETMR", "")
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            latest = find_most_recent_version(data.get("ResultSet", {}).get("Result", []))
+            if not latest or not latest.get("contents"):
+                print(f"[WARNING] No valid config contents found for {project_id}")
+                continue
+
+            response = connection.put(
+                f"/data/projects/{project_id}/config/separatePETMR",
+                data=latest["contents"].strip(),
+                headers=headers
+            )
+
+            if response.status_code in (200, 201, 204):
+                print(f"[SUCCESS] separatePETMR config updated for {project_id}")
+            else:
+                print(f"[ERROR] Failed to update {project_id}: HTTP {response.status_code} {response.text}")
+
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] separatePETMR config update complete.")
+
+def execute_update_split_petmr_sessions_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates the SplitPetMrSessions configuration for one or more XNAT projects.
+
+    Expects input files named <project_id>.SplitPetMrSessions.json in the input folder.
+    Each file should be a versioned config JSON object with a ResultSet.Result list.
+    """
+
+    if not args.input_folder:
+        print("[ERROR]: --input_folder is required.")
+        return
+
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
+
+    headers = {"Content-Type": "text/plain"}
+
+    for file in sorted(input_path.glob("*.SplitPetMrSessions.json")):
+        project_id = file.stem.replace(".SplitPetMrSessions", "")
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            latest = find_most_recent_version(data.get("ResultSet", {}).get("Result", []))
+            if not latest or not latest.get("contents"):
+                print(f"[WARNING] No valid config contents found for {project_id}")
+                continue
+
+            response = connection.put(
+                f"/data/projects/{project_id}/config/SplitPetMrSessions",
+                data=latest["contents"].strip(),
+                headers=headers
+            )
+
+            if response.status_code in (200, 201, 204):
+                print(f"[SUCCESS] SplitPetMrSessions config updated for {project_id}")
+            else:
+                print(f"[ERROR] Failed to update {project_id}: HTTP {response.status_code} {response.text}")
+
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] SplitPetMrSessions config update complete.")
+
+def execute_update_scan_quality_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates the scan-quality configuration for one or more XNAT projects.
+
+    Expects input files named <project_id>.scan-quality.json in the input folder.
+    Each file should be a versioned config JSON object with a ResultSet.Result list.
+    """
+
+    if not args.input_folder:
+        print("[ERROR]: --input_folder is required.")
+        return
+
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
+
+    headers = {"Content-Type": "text/plain"}
+
+    for file in sorted(input_path.glob("*.scan-quality.json")):
+        project_id = file.stem.replace(".scan-quality", "")
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            latest = find_most_recent_version(data.get("ResultSet", {}).get("Result", []))
+            if not latest or not latest.get("contents"):
+                print(f"[WARNING] No valid config contents found for {project_id}")
+                continue
+
+            response = connection.put(
+                f"/data/projects/{project_id}/config/scan-quality",
+                data=latest["contents"].strip(),
+                headers=headers
+            )
+
+            if response.status_code in (200, 201, 204):
+                print(f"[SUCCESS] scan-quality config updated for {project_id}")
+            else:
+                print(f"[ERROR] Failed to update {project_id}: HTTP {response.status_code} {response.text}")
+
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] scan-quality config update complete.")
 
 def execute_list_project_accessibilities(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -1230,6 +1439,49 @@ def execute_update_subject_demographics_json(connection: XNATSession, args: argp
 
     print("[INFO] Subject upload complete.")
 
+def execute_update_downloader_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    if not args.input_folder:
+        print("[ERROR] --input_folder is required.")
+        return
+
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
+
+    headers = {"Content-Type": "text/plain"}
+    had_error = False
+
+    for file in sorted(input_path.glob("*.downloader.json")):
+        project_id = file.stem.replace(".downloader", "")
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            latest = find_most_recent_version(data.get("ResultSet", {}).get("Result", []))
+            if not latest or not latest.get("contents"):
+                print(f"[WARNING] No valid config contents found for {project_id}")
+                had_error = True
+                continue
+
+            response = connection.put(
+                f"/data/projects/{project_id}/config/downloader",
+                data=latest["contents"].strip(),
+                headers=headers
+            )
+
+            if response.status_code in (200, 201, 204):
+                print(f"[INFO] Updated downloader config for project: {project_id} (version {latest.get('version')})")
+            else:
+                print(f"[ERROR] Failed to update {project_id}: HTTP {response.status_code} {response.text}")
+                had_error = True
+
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+            had_error = True
+
+    if not had_error:
+        print("[INFO] Downloader config JSON update complete.")
 
 def execute_list_master(connection: XNATSession, args: argparse.Namespace) -> None:
     
@@ -1286,6 +1538,20 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         execute_update_bids_json(connection, args)
     elif args.resource_config:
         execute_update_resource_config_json(connection, args)
+    elif args.container_service:
+        execute_update_container_service_json(connection, args)
+    elif args.downloader:
+        execute_update_downloader_json(connection, args)
+    elif args.pipelines:
+        execute_update_pipelines_json(connection, args)
+    elif args.project_config:
+        execute_update_project_config_json(connection,args)
+    elif args.separate_petmr:
+        execute_update_separate_petmr_json(connection,args)
+    elif args.split_petmr_sessions:
+        execute_update_split_petmr_sessions_json(connection,args)
+    elif args.scan_quality:
+        execute_update_scan_quality_json(connection,args)
     else:
         print("[WARNING] Invalid UPDATE action. Use --update with --accessibilities, --project_xml, --groups, or --tracer_json.")
 
@@ -1673,10 +1939,12 @@ def execute_get_resource_config(connection: XNATSession, args: argparse.Namespac
 
     print("[INFO] Resource config JSON retrieval complete.")
 
-def execute_get_container_service(connection: XNATSession, args: argparse.Namespace) -> None:
+def execute_get_split_petmr_sessions_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Retrieves container_service JSON for each project and saves it to an output folder.
-    Output filename: <projectID>.container_service.json
+    Retrieves SplitPetMrSessions configuration for each project and saves it to an output folder.
+    Output filename: <projectID>.SplitPetMrSessions.json
+
+    Uses /data/projects/{project_id}/config/SplitPetMrSessions
     """
 
     if not args.output_folder:
@@ -1700,24 +1968,122 @@ def execute_get_container_service(connection: XNATSession, args: argparse.Namesp
             all_projects = connection.get_json("/data/projects")
             project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
         except Exception as e:
-            print(f"Failed to retrieve project list: {e}")
+            print(f"[ERROR] Failed to retrieve project list: {e}")
             return
 
     for project_id in project_ids:
         try:
-            response = connection.get(f"/data/projects/{project_id}/config/container-service")
+            response = connection.get(f"/data/projects/{project_id}/config/SplitPetMrSessions")
             if response.status_code == 200:
                 json_data = response.json()
-                out_path = Path(args.output_folder) / f"{project_id}.container_service.json"
+                out_path = Path(args.output_folder) / f"{project_id}.SplitPetMrSessions.json"
                 with open(out_path, "w", encoding="utf-8") as f:
                     json.dump(json_data, f, indent=4)
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
-                continue # Skip silently if container_service does not exist
+                continue  # Skip if config doesn't exist
         except Exception as e:
-            print (F"[ERROR] {project_id}: {e}")
+            print(f"[ERROR] {project_id}: {e}")
 
-        print("[INFO] Service container JSON retrieval complete")
+    print("[INFO] SplitPetMrSessions JSON retrieval complete")
+
+def execute_get_scan_quality_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves scan-quality configuration for each project and saves it to an output folder.
+    Output filename: <projectID>.scan-quality.json
+
+    Uses /data/projects/{project_id}/config/scan-quality
+    """
+
+    if not args.output_folder:
+        print("[ERROR]: --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/config/scan-quality")
+            if response.status_code == 200:
+                json_data = response.json()
+                out_path = Path(args.output_folder) / f"{project_id}.scan-quality.json"
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] scan-quality JSON retrieval complete")
+
+def execute_update_container_service_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Updates container-service wrapper config for each wrapper in each JSON file.
+    Each file should be named <project_id>.container_service.json and contain
+    multiple wrapper entries in ResultSet > Result.
+    """
+
+    if not args.input_folder:
+        print("[ERROR] --input_folder is required.")
+        return
+
+    input_path = Path(args.input_folder)
+    if not input_path.exists():
+        print(f"[ERROR] Input folder does not exist: {args.input_folder}")
+        return
+
+    headers = {"Content-Type": "text/plain"}
+
+    for file in sorted(input_path.glob("*.container_service.json")):
+        project_id = file.stem.replace(".container_service", "")
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            wrappers = data.get("ResultSet", {}).get("Result", [])
+            for wrapper in wrappers:
+                wrapper_path = wrapper.get("path")
+                contents = wrapper.get("contents", "").strip()
+
+                if not wrapper_path or not contents:
+                    print(f"[WARNING] Skipping missing wrapper info in {project_id}")
+                    continue
+
+                response = connection.put(
+                    f"/data/projects/{project_id}/config/container-service/{wrapper_path}",
+                    data=contents,
+                    headers=headers
+                )
+
+                if response.status_code in (200, 201, 204):
+                    print(f"[INFO] Updated wrapper '{wrapper_path}' for project {project_id}")
+                else:
+                    print(f"[ERROR] {project_id}/{wrapper_path}: HTTP {response.status_code} {response.text}")
+
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Container-service wrapper update complete.")
+
 
 def execute_get_session_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -1766,8 +2132,6 @@ def execute_get_session_json(connection: XNATSession, args: argparse.Namespace) 
             xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: Unexpected error for session {session_id}: {e}")
 
     print("[INFO] Session JSON retrieval completed successfully.")
-
-
 
 def execute_get_session_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     """
@@ -1825,6 +2189,7 @@ def execute_get_session_xml(connection: XNATSession, args: argparse.Namespace) -
 
     print("[INFO] Session XML retrieval completed successfully.")
 
+<<<<<<< HEAD
 def execute_get_subject_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves subject XMLs based on a list of ProjectID, SubjectID, SessionID from a CSV/TXT file.
@@ -1884,6 +2249,8 @@ def execute_get_subject_xml(connection: XNATSession, args: argparse.Namespace) -
     print("[INFO] Subject XML retrieval completed successfully.")
 
 
+=======
+>>>>>>> 9e3ba46123edef6e9a63f79f8a54cf96b0cd2730
 def execute_get_bids_json(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Retrieves BIDS configuration JSON for each project and saves it to an output folder.
@@ -1932,6 +2299,291 @@ def execute_get_bids_json(connection: XNATSession, args: argparse.Namespace) -> 
 
     print("[INFO] BIDS JSON retrieval complete")
 
+def execute_get_pipelines_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves pipeline configuration JSON for each project and saves it to an output folder.
+    Output filename: <projectID>.pipelines.json
+
+    Uses /data/projects/{project_id}/config/pipelines
+    """
+
+    if not args.output_folder:
+        print("[ERROR]: --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/config/pipelines")
+            if response.status_code == 200:
+                json_data = response.json()
+                out_path = Path(args.output_folder) / f"{project_id}.pipelines.json"
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue  # Skip if pipelines config doesn't exist
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Pipelines JSON retrieval complete")
+
+def execute_get_container_service_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves container_service JSON for each project and saves it to an output folder.
+    Output filename: <projectID>.container_service.json
+    """
+
+    if not args.output_folder:
+        print("[ERROR]: --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/config/container-service")
+            if response.status_code == 200:
+                json_data = response.json()
+                out_path = Path(args.output_folder) / f"{project_id}.container_service.json"
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue # Skip silently if container_service does not exist
+        except Exception as e:
+            print (F"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Service container JSON retrieval complete")
+
+def execute_get_project_resources_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves project-level resource metadata JSON for each project and saves it to an output folder.
+    Output filename: <projectID>.resources.json
+
+    Uses /data/projects/{project}/resources?format=json
+    """
+
+    if not args.output_folder:
+        print("[ERROR]: --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/resources?format=json")
+            if response.status_code == 200:
+                json_data = response.json()
+                out_path = Path(args.output_folder) / f"{project_id}.resources.json"
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue  # Skip if resources not found
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Project resources JSON retrieval complete")
+
+def execute_get_downloader_config_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves downloader configuration JSON for each project and saves it to an output folder.
+    Output filename: <projectID>.downloader.json
+
+    Uses /data/projects/{project}/config/downloader
+    """
+    if not args.output_folder:
+        print("[ERROR]: --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/config/downloader")
+            if response.status_code == 200:
+                json_data = response.json()
+                out_path = Path(args.output_folder) / f"{project_id}.downloader.json"
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue  # Downloader config might not exist
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Downloader JSON retrieval complete")
+
+def execute_get_project_config_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves project configuration JSON for each project and saves it to an output folder.
+    Output filename: <projectID>.project.json
+
+    Uses /data/projects/{project}/config/project
+    """
+    if not args.output_folder:
+        print("[ERROR]: --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/config/project")
+            if response.status_code == 200:
+                json_data = response.json()
+                out_path = Path(args.output_folder) / f"{project_id}.project.json"
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue  # Project config might not exist
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] Project JSON retrieval complete")
+
+def execute_get_separate_petmr_json(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Retrieves separatePETMR configuration for each project and saves it to an output folder.
+    Output filename: <projectID>.separatePETMR.json
+
+    Uses /data/projects/{project_id}/config/separatePETMR
+    """
+
+    if not args.output_folder:
+        print("[ERROR]: --output_folder is required.")
+        return
+
+    Path(args.output_folder).mkdir(parents=True, exist_ok=True)
+
+    # Get project IDs
+    project_ids = []
+    if args.csv_file:
+        try:
+            with open(args.csv_file, mode='r') as file:
+                csv_reader = csv.reader(file, delimiter='\t')
+                project_ids = [row[0].strip() for row in csv_reader if row]
+        except Exception as e:
+            print(f"[ERROR] Failed to read CSV file: {e}")
+            return
+    else:
+        try:
+            all_projects = connection.get_json("/data/projects")
+            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve project list: {e}")
+            return
+
+    for project_id in project_ids:
+        try:
+            response = connection.get(f"/data/projects/{project_id}/config/separatePETMR")
+            if response.status_code == 200:
+                json_data = response.json()
+                out_path = Path(args.output_folder) / f"{project_id}.separatePETMR.json"
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, indent=4)
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue  # Skip if config doesn't exist
+        except Exception as e:
+            print(f"[ERROR] {project_id}: {e}")
+
+    print("[INFO] separatePETMR JSON retrieval complete")
+
+
 
 def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.subject_demographics_json:
@@ -1971,7 +2623,7 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
         return
 
     if args.container_service:
-        execute_get_container_service(connection, args)
+        execute_get_container_service_json(connection, args)
         return
 
     if args.session_json:
@@ -1990,8 +2642,35 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
         execute_get_bids_json(connection, args)
         return
 
-    print("[ERROR] No valid 'GET' action specified.")
+    if args.project_resources:
+        execute_get_project_resources_json(connection, args)
+        return
 
+    if args.downloader:
+        execute_get_downloader_config_json(connection, args)
+        return
+
+    if args.pipelines:
+        execute_get_pipelines_json(connection, args)
+        return
+
+    if args.project_config:
+        execute_get_project_config_json(connection, args)
+        return
+
+    if args.separate_petmr:
+        execute_get_separate_petmr_json(connection, args)
+        return
+
+    if args.split_petmr_sessions:
+        execute_get_split_petmr_sessions_json(connection, args)
+        return
+
+    if args.scan_quality:
+        execute_get_scan_quality_json(connection,args)
+        return
+
+    print("[ERROR] No valid 'GET' action specified.")
 
 
 #def execute_project_list(session: XNATSession, args: argparse.Namespace) -> None:
@@ -2044,6 +2723,29 @@ def execute_session_list(connection: XNATSession, args: argparse.Namespace) -> N
             for experiment in po.experiments.values():
                 print(f"{project_header} {format_session_data(experiment)}")
 
+
+def is_shared_session(project_id:str, session_json:{}) -> bool:
+    my_items = session_json["items"]
+    for item in my_items:
+        if "data_fields" in item:
+            my_data_fields = item["data_fields"]
+            if "project" in my_data_fields:
+                my_project = my_data_fields["project"]
+                return (project_id != my_project)
+
+
+    return True
+
+def extract_session_label(session_json:{}) -> str:
+    my_items = session_json["items"]
+    for item in my_items:
+        if "data_fields" in item:
+            my_data_fields = item["data_fields"]
+            if "label" in my_data_fields:
+                return my_data_fields["label"]
+    return "Unknown_session_label"
+
+
 def execute_list_subjects_sessions(connection: XNATSession, args: argparse.Namespace) -> None:
     project_ids = get_project_ids(connection, args)
     tab="\t"
@@ -2062,10 +2764,15 @@ def execute_list_subjects_sessions(connection: XNATSession, args: argparse.Names
             try:
                 for experiment in subject.experiments:
 #                    exp_path = f"/data/projects/{id}/subjects/{subject}/experiments/{experiment}"
-#                    exp_path = f"/data/experiments/{experiment}"
-#                    exp_json = connection.get_json(exp_path)
-#                    data_type=exp_json['items'][0]['meta']['xsi:type']
-                    print(f"{id}{tab}{subject.id}{tab}{experiment}")
+                    exp_path = f"/data/experiments/{experiment}"
+                    exp_json = connection.get_json(exp_path)
+                    if (args.exclude_shares and is_shared_session(id, exp_json)):
+                        continue
+                    exp_label_to_print = experiment
+                    if (args.print_session_label):
+                        exp_label_to_print = extract_session_label(exp_json)
+                    data_type=exp_json['items'][0]['meta']['xsi:type']
+                    print(f"{id}{tab}{subject.id}{tab}{exp_label_to_print}")
 #                    print(f"{id}{tab}{subject.id}{tab}{experiment}{tab}{exp.__xsi_type__}")
             except Exception as e:
                 xnat_cli_scripts.cli_common.print_stderr(f"[ERROR] Exception for project {id} subject {subject.id}: {e}")
@@ -2081,6 +2788,11 @@ def execute_list_experiments(connection: XNATSession, args: argparse.Namespace):
     for project_id in project_ids:
         experiments = connection.get_json(f"/data/projects/{project_id}/experiments")
         for experiment in experiments['ResultSet']['Result']:
+            exp_path = f"/data/experiments/{experiment['ID']}"
+            xnat_cli_scripts.cli_common.print_stderr(exp_path)
+            exp_json = connection.get_json(exp_path)
+            if (args.exclude_shares and is_shared_session(project_id, exp_json)):
+                continue
             print(f"{project_id}{tab}{experiment['label']}{tab}{experiment['ID']}")
 
 
@@ -2121,6 +2833,7 @@ if __name__ == "__main__":
     parser.add_argument(      '--tracer_json',     dest='tracer_json',              help="Retrieve tracer information for projects",   action='store_true')
     parser.add_argument(      '--configs',         dest='configs',                  help="Specify configs for list/get",               action='store_true')
     parser.add_argument(      '--resource_config', dest='resource_config',          help="Retrieve resource_config for projects",      action='store_true')
+    parser.add_argument(      '--project_resources', dest='project_resources',                 help="Any resources at project level",            action='store_true')
     parser.add_argument(      '--container_service',dest='container_service',       help="Retrieve container_service for projects",    action='store_true')
     parser.add_argument(       '--complete_subject_json',dest='complete_subject_json',help="Retrieve entire subject JSONs by session ID",        action='store_true')
     parser.add_argument(       '--session_json',   dest='session_json',             help="Retrieve session JSONs by session ID",       action='store_true')
@@ -2128,11 +2841,19 @@ if __name__ == "__main__":
     parser.add_argument(       '--subject_xml',    dest='subject_xml',              help="Retrieve subject XML files by session ID",   action='store_true')
     parser.add_argument(       '--experiments',    dest='experiments',              help="Include experiments in output list",         action='store_true')
     parser.add_argument(       '--bids',           dest='bids',                     help="Interacts with XNAT BIDS configuration",     action='store_true')
+    parser.add_argument(       '--downloader',     dest='downloader',               help="Interacts with XNAT downloader configuration", action='store_true')
+    parser.add_argument(       '--pipelines',      dest='pipelines',                help="Interacts with XNAT pipelines configuration",  action='store_true')
+    parser.add_argument(       '--project_config', dest='project_config',           help="Interacts with XNAT project config",          action='store_true')
+    parser.add_argument(       '--separate_petmr', dest='separate_petmr',           help="Interacts with separate petmr project config", action='store_true')
+    parser.add_argument(       '--split_petmr_sessions', dest='split_petmr_sessions', help="Interacts with split petmr project config", action='store_true')
+    parser.add_argument(       '--scan_quality',   dest='scan_quality',             help="Interacts with split petmr project config",   action='store_true')
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
     parser.add_argument('-s', '--sleep',           dest='sleep',                    help="Time to sleep after each REST call")
     parser.add_argument('-v', '--verbose',         dest='verbose',                  help="Verbose mode",                               action='store_true')
+    parser.add_argument(      '--exclude_shares',  dest='exclude_shares',           help="Exclude (destination) shared items",         action='store_true')
+    parser.add_argument(      '--print_session_label', dest='print_session_label',  help="Print session label rather than accession number", action='store_true')
     parser.add_argument(      '--csv',             dest='csv_file',                 help='Path to CSV file operations such as listing, removing, or changing groups')
     parser.add_argument(  '--csv_projects_subjects', dest='csv_projects_subjects_file',  help="Path to CSV with project/subject ID tuplets")
     parser.add_argument(      '--input_folder',    dest='input_folder',             help='Path to input folder of files')
