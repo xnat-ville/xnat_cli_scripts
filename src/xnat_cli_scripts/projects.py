@@ -2760,15 +2760,18 @@ def execute_list_subjects_sessions(connection: XNATSession, args: argparse.Names
                 xnat_cli_scripts.cli_common.print_stderr(f"{id}{tab}{subject.id}  {subject_index} / {subject_count}   {project_index} / {project_count}")
             try:
                 for experiment in subject.experiments:
-#                    exp_path = f"/data/projects/{id}/subjects/{subject}/experiments/{experiment}"
-                    exp_path = f"/data/experiments/{experiment}"
-                    exp_json = connection.get_json(exp_path)
-                    if (args.exclude_shares and is_shared_session(id, exp_json)):
-                        continue
                     exp_label_to_print = experiment
-                    if (args.print_session_label):
-                        exp_label_to_print = extract_session_label(exp_json)
-                    data_type=exp_json['items'][0]['meta']['xsi:type']
+                    # Only grab the session JSON if we need it
+                    if (args.exclude_shares or args.print_session_label):
+                        exp_path = f"/data/experiments/{experiment}"
+                        exp_json = connection.get_json(exp_path)
+                        if (args.exclude_shares and is_shared_session(id, exp_json)):
+                            continue
+
+                        if (args.print_session_label):
+                            exp_label_to_print = extract_session_label(exp_json)
+
+#                    data_type=exp_json['items'][0]['meta']['xsi:type']
                     print(f"{id}{tab}{subject.id}{tab}{exp_label_to_print}")
 #                    print(f"{id}{tab}{subject.id}{tab}{experiment}{tab}{exp.__xsi_type__}")
             except Exception as e:
