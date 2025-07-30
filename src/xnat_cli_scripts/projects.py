@@ -2166,7 +2166,6 @@ def execute_get_session_xml(connection: XNATSession, args: argparse.Namespace) -
         project_id, subject_id, session_id = row[0], row[1], row[2]
 
         try:
-            Path(args.output_folder, project_id).mkdir(parents=True, exist_ok=True)
             output_file = Path(args.output_folder, project_id, f"{session_id}.xml")
             if output_file.exists():
                 print(f"{session_index} / {session_count}  Project {project_id}  Subject {subject_id}  Session {session_id}  Already exists on disk ")
@@ -2176,6 +2175,7 @@ def execute_get_session_xml(connection: XNATSession, args: argparse.Namespace) -
             response = connection.get(f"/data/experiments/{session_id}?format=xml")
             response.raise_for_status()
 
+            Path(args.output_folder, project_id).mkdir(parents=True, exist_ok=True)
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(response.content.decode("utf-8"))
                 f.close()
@@ -2229,12 +2229,16 @@ def execute_get_subject_xml(connection: XNATSession, args: argparse.Namespace) -
         project_id, subject_id = row[0], row[1]
 
         try:
-            Path(args.output_folder, project_id).mkdir(parents=True, exist_ok=True)
+            output_file = Path(args.output_folder, project_id, f"{subject_id}.xml")
+            if output_file.exists():
+                print(f"{subject_index} / {subject_count}  Project {project_id}  Subject {subject_id}  Already exists on disk")
+                continue
+
             print(f"{subject_index} / {subject_count}  Project {project_id}  Subject {subject_id}  ")
             response = connection.get(f"/data/projects/{project_id}/subjects/{subject_id}?format=xml")
             response.raise_for_status()
 
-            output_file = Path(args.output_folder, project_id, f"{subject_id}.xml")
+            Path(args.output_folder, project_id).mkdir(parents=True, exist_ok=True)
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(response.content.decode("utf-8"))
                 f.close()
