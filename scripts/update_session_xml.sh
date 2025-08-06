@@ -23,7 +23,7 @@ if [ $# -ne 3 ]; then
     exit 1
 fi
 
-Start $0 $* at `date`
+echo Start $0 $* at `date`
 
 auth_string="$1"
 system="$2"
@@ -42,4 +42,4 @@ update_session_xml	\
     "$BOILER_PLATE --csv $active_projects "	\
     test_data/session_xml_processed
 
-Complete $0 $* at `date`
+echo Complete $0 $* at `date`
