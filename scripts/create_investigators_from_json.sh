@@ -25,6 +25,8 @@ fi
 auth_string="$1"
 system="$2"
 
+echo Start $0 $* `date`
+
 BASE_FOLDER=`dirname $0`
 source "$BASE_FOLDER/common.sh"
 set -e
@@ -38,3 +40,5 @@ ls "test_data/modified_investigator_json" | sed -e 's/.json//' | sort -n > test_
 ls -l test_data/sorted_investigator_ids.txt
 
 create_investigator_json_files "$BASE_FOLDER" "$BOILER_PLATE --csv test_data/sorted_investigator_ids.txt" "test_data/modified_investigator_json"
+
+echo Complete $0 $* `date`
