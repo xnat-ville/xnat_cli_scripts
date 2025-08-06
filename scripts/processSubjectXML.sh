@@ -16,7 +16,7 @@ check_args() {
   if [[ $# -ne 4 ]] ; then
     usage_and_exit
   fi
-  if [ -z "${2}" ] || [ -z "${3}" ] || [ ! -d "${2}" ] || [ ! -d "${3}" ]; then
+  if [ -z "${2}" ] || [ -z "${3}" ] || [ ! -d "${2}" ]; then
    usage_and_exit
   fi
 }
@@ -210,12 +210,42 @@ process_subject_xml () {
 set -e
 check_args $*
 
+echo Start $0 $* at `date`
+
 INDEX_FILE=$1
 INDIR=$2
 OUTDIR=$3
 REMOVESHARES=$4
 
-SED="sed -i bak"
+#SED="sed -i bak"
+
+# Perform a dry run to see if all input files exist
+# Exit if anything is missing
+
+missing_files=0
+reviewed_files=0
+while read -a project_subject ; do
+  project=${project_subject[0]}
+  subject=${project_subject[1]}
+
+  input_xml_path=$( compute_xml_path  ${INDIR} ${project} ${subject} )
+  if [[ ! -e ${input_xml_path} ]] ; then
+    echo Missing: ${input_xml_path}
+    missing_files=$(( $missing_files + 1 ))
+  fi
+  reviewed_files=$(( $reviewed_files + 1 ))
+done < ${INDEX_FILE}
+
+index_length=`cat ${INDEX_FILE} | wc -l`
+echo "Dry run files reviewed: ${reviewed_files}"
+echo "Index file length:      ${index_length}"
+echo "Index file:             ${INDEX_FILE}"
+
+if [[ $missing_files -ne 0 ]] ; then
+  echo There are ${missing_files} missing that are indexed in ${INDEX_FILE}
+  echo This script will exit
+  exit 1
+fi
 
 while read -a project_subject ; do
   project=${project_subject[0]}
@@ -233,6 +263,8 @@ while read -a project_subject ; do
   process_subject_xml ${REMOVESHARES} ${input_xml_path} ${output_xml_path}
 done < ${INDEX_FILE}
 
+
+echo Complete $0 $* at `date`
 
 
 ##-for file in ${INDIR}/*.xml
