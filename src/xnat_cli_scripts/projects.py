@@ -1157,22 +1157,27 @@ def execute_update_session_xml(connection: XNATSession, args: argparse.Namespace
                     file_count = len(folder_listing)
                     for f in folder_listing:
                         file_path = f"{project_folder}/{f}"
-                        with open(file_path) as xml_file:
-                            put_path = f"/data/projects/{id}"
-                            print(f"{project_index} / {project_count}  {file_index} / {file_count}  {put_path}")
-                            file_index += 1
-                            response = connection.put(put_path, data=xml_file, headers=http_headers)
-                            print(response)
-                            xml_file.close()
+
+                        session_tree = ET.parse(file_path)
+                        session_root = session_tree.getroot()
+                        session_project = session_root.attrib['project']
+                        session_id = session_root.attrib['ID']
+                        print(f"Folder {project_folder} Project {session_project} Session {session_id}")
+                        if id == session_project:
+                            print("In the right project")
+                            with open(file_path) as xml_file:
+                                put_path = f"/data/projects/{id}/experiments/{session_id}"
+                                print(f"{project_index} / {project_count}  {file_index} / {file_count}  {put_path}")
+                                response = connection.put(put_path, data=xml_file, headers=http_headers)
+                                print(response)
+                                xml_file.close()
+                        else:
+                            print(f"{project_index} / {project_count}  {file_index} / {file_count} SKIP {id} {session_project}")
+                        file_index += 1
 
                 else:
                     xnat_cli_scripts.cli_common.print_stderr(f"Project folder not found at expected path: {project_folder}")
 
-#                with open(file_path) as xml_file:
-#                    put_path = f"/data/projects/{id}"
-#                    print(f"Upload project XML: {put_path}")
-#                    response=connection.put(put_path, data=xml_file, headers=http_headers)
-#                    xml_file.close()
             project_index += 1
     except Exception as e:
         print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}")
