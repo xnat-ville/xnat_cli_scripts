@@ -101,6 +101,19 @@ remove_fixed_fields() {
   fi
 }
 
+# Remove hidden fields from subject XML 
+# We will overwrite the file contents, using a temporary file
+# for intermediate work
+# Arguments:
+#            Path to XML
+remove_hidden_fields() {
+  local_tmp=/tmp/hidden_fields.$$.xml
+  sed 's/<!--hidden_fields[^>]*-->//g' ${1} > ${local_tmp}
+  mv ${local_tmp} ${1}
+}
+
+
+
 # Remove projects that are no longer active from subject XML
 # We will overwrite the file contents, using a temporary file
 # for intermediate work
@@ -123,13 +136,14 @@ remove_inactive_shared_projects() {
   delim=""
   for line in `cat $2 | grep -n -f $1 | cut -d: -f1 | sort -r -n`
   do
+    p=`sed -n "$line,$line""p" $2`
+    shares_removed="${shares_removed} ${delim}${p}"
+    delim=","
+
 #   echo "sed  ${line}d  $2 > $local_tmp"
           sed "${line}d" $2 > $local_tmp
 #   echo mv $local_tmp $2
          mv $local_tmp $2
-    p=`sed -n "$line,$line""p" $1`
-    shares_removed="${shares_removed} ${delim}${p}"
-    delim=","
   done
   echo ${shares_removed}
 
@@ -189,7 +203,8 @@ process_subject_xml () {
   TMP=/tmp/$$.xml
   cp ${2} ${TMP}
 
-  remove_fixed_fields ${TMP}
+  remove_fixed_fields  ${TMP}
+  remove_hidden_fields ${TMP}
   remove_inactive_shared_projects ${1} ${TMP}
 
   output_folder=`dirname ${3}`
