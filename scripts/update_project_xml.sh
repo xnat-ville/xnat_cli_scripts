@@ -22,6 +22,8 @@ if [ $# -ne 2 ]; then
     exit 1
 fi
 
+echo Start $0 $* `date`
+
 auth_string="$1"
 system="$2"
 
@@ -37,3 +39,6 @@ update_project_xml	\
     "$BASE_FOLDER"	\
     "$BOILER_PLATE --csv test_data/active_projects.txt --template templates/template_project_xml.xml"	\
     test_data/project_xml_processed
+
+echo ""
+echo Complete $0 $* `date`
