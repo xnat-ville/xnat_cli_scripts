@@ -19,6 +19,7 @@ import requests
 import csv
 import time
 import json
+import datetime
 from pathlib import Path
 import os
 from os import listdir
@@ -1035,16 +1036,7 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
 
     project_ids = []
     if args.csv_file:
-        try:
-            with open(args.csv_file, mode='r') as file:
-                csv_reader = csv.reader(file, delimiter='\t')
-                project_ids = [row[0].strip() for row in csv_reader if row]
-        except FileNotFoundError:
-            print(f"[ERROR] CSV file not found: {args.csv_file}")
-            return
-        except Exception as e:
-            print(f"[ERROR] Exception while reading CSV: {e}")
-            return
+        project_ids = get_project_ids(connection, args)
     else:
         try:
             listing = listdir(args.input_folder)
@@ -1075,6 +1067,65 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
             project_index += 1
     except Exception as e:
         print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}")
+
+
+def put_subject_xml(connection: XNATSession, project_id: str, file_path: str):
+    http_headers = {'Content-Type': 'application/xml'}
+
+    subject_tree = ET.parse(file_path)
+    subject_root = subject_tree.getroot()
+    subject_project = subject_root.attrib['project']
+    subject_id = subject_root.attrib['ID']
+    if project_id == subject_project:
+        print(f"{file_path} {subject_project}")
+        with open(file_path) as xml_file:
+            put_path = f"/data/projects/{id}/subjects/{subject_id}"
+            response = connection.put(put_path, data=xml_file, headers=http_headers)
+            xml_file.close()
+            return response.status_code
+
+    else:
+        return 0
+
+
+def execute_update_subject_xml_from_csv(connection: XNATSession, args: argparse.Namespace) -> None:
+    if args.csv_file is None:
+        print(f"projects.py::execute_update_subject_xml_from_csv No input CSV file specified. We should not have gotten here")
+        return
+    if args.output_csv is None:
+        print(f"projects.py::execute_update_subject_xml_from_csv No output CSV file specified.")
+        return
+
+    tab='\t'
+    try:
+        with open(args.output_csv, "w", encoding="utf-8") as output_csv:
+            with open(args.csv_file, mode='r') as file:
+                reader = csv.reader(file, delimiter='\t')
+                for row in reader:
+                    print(row)
+                    if (len(row) == 2):
+                        if (row[0].startswith('#')):
+                            output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row, tab) + '\n')
+                        else:
+                            project_folder = f"{args.input_folder}/{row[0]}"
+                            file_path = f"{project_folder}/{row[1]}.xml"
+                            print(file_path)
+                            response_code = put_subject_xml(connection, row[0], file_path)
+                            time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            row.append(f"{response_code}")
+                            row.append(time_stamp)
+                            output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row, tab) + '\n')
+
+                    elif (len(row) > 2):
+                        output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row,tab) + '\n')
+
+                    else:
+                        print(f"projects.py::execute_update_subject_xml_from_csv: Row found with 0 or 1 entry; we will exit {row}")
+                        return
+
+    except Exception as e:
+        print(f"[ERROR] Failed to load subject filter CSV: {e}")
+        return
 
 
 def execute_update_subject_xml(connection: XNATSession, args: argparse.Namespace) -> None:
@@ -1527,6 +1578,8 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
             execute_update_project_xml(connection, args)
         else:
             print("[WARNING] No input folder provided for project XML update.")
+    elif args.subject_xml and args.csv_file:
+        execute_update_subject_xml_from_csv(connection, args)
     elif args.subject_xml:
         execute_update_subject_xml(connection, args)
     elif args.session_xml:
@@ -2870,6 +2923,7 @@ if __name__ == "__main__":
     parser.add_argument(  '--csv_projects_subjects', dest='csv_projects_subjects_file',  help="Path to CSV with project/subject ID tuplets")
     parser.add_argument(      '--input_folder',    dest='input_folder',             help='Path to input folder of files')
     parser.add_argument(      '--output_folder',   dest='output_folder',            help='Path to output folder')
+    parser.add_argument(       '--output_csv',     dest='output_csv',               help="Path to output CSV")
     parser.add_argument(      '--template',        dest='template',                 help='Path to a template file')
     args = parser.parse_args()
 
