@@ -58,3 +58,12 @@ def apply_sleep(args: argparse.Namespace) -> None:
 
 def print_stderr(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
+
+def convert_array_to_string(input_array, delimiter:str) -> str:
+    rtn = ""
+    for index in range(len(input_array) - 1) :
+        rtn += input_array[index] + "\t"
+
+    rtn += input_array[len(input_array)-1]
+
+    return rtn
