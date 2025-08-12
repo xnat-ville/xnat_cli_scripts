@@ -1112,7 +1112,7 @@ def execute_update_subject_xml_from_csv(connection: XNATSession, args: argparse.
                             print(file_path)
                             response_code = put_subject_xml(connection, row[0], file_path)
                             time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            row.append(f"{response_code}")
+                            row.append(f"RESPONSE_CODE: {response_code}")
                             row.append(time_stamp)
                             output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row, tab) + '\n')
 
