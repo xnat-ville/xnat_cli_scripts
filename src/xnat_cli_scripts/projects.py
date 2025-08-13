@@ -1072,21 +1072,24 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
 def put_subject_xml(connection: XNATSession, project_id: str, file_path: str):
     http_headers = {'Content-Type': 'application/xml'}
 
-    subject_tree = ET.parse(file_path)
-    subject_root = subject_tree.getroot()
-    subject_project = subject_root.attrib['project']
-    subject_id = subject_root.attrib['ID']
-    if project_id == subject_project:
-        print(f"{file_path} {subject_project}")
-        with open(file_path) as xml_file:
-            put_path = f"/data/projects/{id}/subjects/{subject_id}"
-            response = connection.put(put_path, data=xml_file, headers=http_headers)
-            xml_file.close()
-            return response.status_code
-
-    else:
-        return 0
-
+    try:
+        subject_tree = ET.parse(file_path)
+        subject_root = subject_tree.getroot()
+        subject_project = subject_root.attrib['project']
+        subject_id = subject_root.attrib['ID']
+        if project_id == subject_project:
+            print(f"{file_path} {subject_project}")
+            with open(file_path) as xml_file:
+                put_path = f"/data/projects/{id}/subjects/{subject_id}"
+                response = connection.put(put_path, data=xml_file, headers=http_headers, accepted_status=[200,201,400,500])
+                xml_file.close()
+                return response.status_code
+        else:
+            return 0
+    except Exception as e:
+        print(f"Exception for {file_path}")
+        print(e)
+        return 1
 
 def execute_update_subject_xml_from_csv(connection: XNATSession, args: argparse.Namespace) -> None:
     if args.csv_file is None:
