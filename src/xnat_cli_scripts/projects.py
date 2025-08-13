@@ -1080,7 +1080,7 @@ def put_subject_xml(connection: XNATSession, project_id: str, file_path: str):
         if project_id == subject_project:
             print(f"{file_path} {subject_project}")
             with open(file_path) as xml_file:
-                put_path = f"/data/projects/{id}/subjects/{subject_id}"
+                put_path = f"/data/projects/{project_id}/subjects/{subject_id}"
                 response = connection.put(put_path, data=xml_file, headers=http_headers, accepted_status=[200,201,400,500])
                 xml_file.close()
                 return response.status_code
@@ -1127,7 +1127,7 @@ def execute_update_subject_xml_from_csv(connection: XNATSession, args: argparse.
                         return
 
     except Exception as e:
-        print(f"[ERROR] Failed to load subject filter CSV: {e}")
+        print(f"[ERROR] Failed to read Subject CSV or upload session XML: {e}")
         return
 
 
@@ -1186,6 +1186,29 @@ def execute_update_subject_xml(connection: XNATSession, args: argparse.Namespace
         print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}")
 
 
+def put_session_xml(connection: XNATSession, project_id: str, file_path: str):
+    http_headers = {'Content-Type': 'application/xml'}
+
+    try:
+        session_tree = ET.parse(file_path)
+        session_root = session_tree.getroot()
+        session_project = session_root.attrib['project']
+        session_id = session_root.attrib['ID']
+        if project_id == session_project:
+            print(f"{file_path} {session_project}")
+            with open(file_path) as xml_file:
+                put_path = f"/data/projects/{project_id}/experiments/{session_id}"
+                response = connection.put(put_path, data=xml_file, headers=http_headers, accepted_status=[200,201,400,500])
+                xml_file.close()
+                return response.status_code
+        else:
+            return 0
+    except Exception as e:
+        print(f"Exception for {file_path}")
+        print(e)
+        return 1
+
+
 def execute_update_session_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     """
     Update/upload project XML by reading XML for individual files in an input folder.
@@ -1193,48 +1216,89 @@ def execute_update_session_xml(connection: XNATSession, args: argparse.Namespace
 
     if args.input_folder is None:
         raise Exception("projects --update --project_xml requires --input_folder")
+    if args.csv_file is None:
+        print(f"projects.py::execute_update_session_xml_from_csv No input CSV file specified.")
+        return
+    if args.output_csv is None:
+        print(f"projects.py::execute_update_session_xml_from_csv No output CSV file specified.")
+        return
 
-    project_ids = get_project_ids(connection, args)
+    tab='\t'
     try:
-        http_headers = {}
-        http_headers['Content-Type'] = 'application/xml'
-        project_count = len(project_ids)
-        project_index = 1
-        response = ""
-        file_path="XX"
-        for id in project_ids:
-            if (not id.startswith("#")):
-                project_folder=f"{args.input_folder}/{id}"
-                if (os.path.exists(project_folder)):
-                    folder_listing = listdir(project_folder)
-                    file_index = 1
-                    file_count = len(folder_listing)
-                    for f in folder_listing:
-                        file_path = f"{project_folder}/{f}"
-
-                        session_tree = ET.parse(file_path)
-                        session_root = session_tree.getroot()
-                        session_project = session_root.attrib['project']
-                        session_id = session_root.attrib['ID']
-                        print(f"Folder {project_folder} Project {session_project} Session {session_id}")
-                        if id == session_project:
-                            print("In the right project")
-                            with open(file_path) as xml_file:
-                                put_path = f"/data/projects/{id}/experiments/{session_id}"
-                                print(f"{project_index} / {project_count}  {file_index} / {file_count}  {put_path}")
-                                response = connection.put(put_path, data=xml_file, headers=http_headers)
-                                print(response)
-                                xml_file.close()
+        with open(args.output_csv, "w", encoding="utf-8") as output_csv:
+            with open(args.csv_file, mode='r') as file:
+                reader = csv.reader(file, delimiter='\t')
+                for row in reader:
+                    print(row)
+                    if (len(row) == 3):
+                        if (row[0].startswith('#')):
+                            output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row, tab) + '\n')
                         else:
-                            print(f"{project_index} / {project_count}  {file_index} / {file_count} SKIP {id} {session_project}")
-                        file_index += 1
+                            project_folder = f"{args.input_folder}/{row[0]}"
+                            file_path = f"{project_folder}/{row[2]}.xml"
+                            print(file_path)
+                            response_code = put_session_xml(connection, row[0], file_path)
+                            time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            row.append(f"RESPONSE_CODE: {response_code}")
+                            row.append(time_stamp)
+                            output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row, tab) + '\n')
 
-                else:
-                    xnat_cli_scripts.cli_common.print_stderr(f"Project folder not found at expected path: {project_folder}")
+                    elif (len(row) > 2):
+                        output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row,tab) + '\n')
 
-            project_index += 1
+                    else:
+                        print(f"projects.py::execute_update_session_xml_from_csv: Row found with 0, 1 or 2 entries; we will exit {row}")
+                        return
+
     except Exception as e:
-        print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}")
+        print(f"[ERROR] Failed to read Session CSV or upload session XML: {e}")
+        return
+
+
+
+
+
+#    project_ids = get_project_ids(connection, args)
+#    try:
+#        http_headers = {}
+#        http_headers['Content-Type'] = 'application/xml'
+#        project_count = len(project_ids)
+#        project_index = 1
+#        response = ""
+#        file_path="XX"
+#        for id in project_ids:
+#            if (not id.startswith("#")):
+#                project_folder=f"{args.input_folder}/{id}"
+#                if (os.path.exists(project_folder)):
+#                    folder_listing = listdir(project_folder)
+#                    file_index = 1
+#                    file_count = len(folder_listing)
+#                    for f in folder_listing:
+#                        file_path = f"{project_folder}/{f}"
+#
+#                        session_tree = ET.parse(file_path)
+#                        session_root = session_tree.getroot()
+#                        session_project = session_root.attrib['project']
+#                        session_id = session_root.attrib['ID']
+#                        print(f"Folder {project_folder} Project {session_project} Session {session_id}")
+#                        if id == session_project:
+#                            print("In the right project")
+#                            with open(file_path) as xml_file:
+#                                put_path = f"/data/projects/{id}/experiments/{session_id}"
+#                                print(f"{project_index} / {project_count}  {file_index} / {file_count}  {put_path}")
+#                                response = connection.put(put_path, data=xml_file, headers=http_headers)
+#                                print(response)
+#                                xml_file.close()
+#                        else:
+#                            print(f"{project_index} / {project_count}  {file_index} / {file_count} SKIP {id} {session_project}")
+#                        file_index += 1
+#
+#                else:
+#                    xnat_cli_scripts.cli_common.print_stderr(f"Project folder not found at expected path: {project_folder}")
+#
+#            project_index += 1
+#    except Exception as e:
+#        print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}")
 
 
 

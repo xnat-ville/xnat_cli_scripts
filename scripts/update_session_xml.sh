@@ -18,8 +18,8 @@ update_session_xml() {
 #               system (see common.sh)
 #               active projects file
 
-if [ $# -ne 3 ]; then
-    echo "Arguments: auth_string system active_projects_file"
+if [ $# -ne 4 ]; then
+    echo "Arguments: auth_string system active_projects_file output_csv"
     exit 1
 fi
 
@@ -28,6 +28,7 @@ echo Start $0 $* at `date`
 auth_string="$1"
 system="$2"
 active_projects="$3"
+output_csv="$4"
 
 BASE_FOLDER=`dirname $0`
 source "$BASE_FOLDER/common.sh"
@@ -39,7 +40,7 @@ BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 update_session_xml	\
     "$BASE_FOLDER"	\
-    "$BOILER_PLATE --csv $active_projects "	\
+    "$BOILER_PLATE --csv $active_projects --output_csv $output_csv"	\
     test_data/session_xml_processed
 
 echo Complete $0 $* at `date`
