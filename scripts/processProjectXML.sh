@@ -2,6 +2,51 @@
 
 # CNDA to CNDA2 Migration Script Jenny Gurney, 5/23/2024
 
+# Remove single alias
+# Arguments:
+#            Input/output file
+#            Alias to remove
+remove_single_alias() {
+  TMPFILE=/tmp/alias.$$.txt
+  pattern="^$2</xnat:alias>"
+  grep -n -e "$pattern" $1 &> $TMPFILE
+  if [[ $? -eq 0 ]] ; then
+    echo $1
+    line_number=`sed -e 's/:.*$//' $TMPFILE`
+    line_number=$(( $line_number - 1 ))
+    sed "${line_number}d" $1 | grep -v -e "$pattern" > $TMPFILE
+    mv $TMPFILE $1
+  else
+    rm -f $TMPFILE
+  fi
+}
+
+
+# Remove duplicate aliases
+# Arguments:
+#            Input/output file
+remove_duplicate_aliases() {
+ remove_single_alias $1 COGED
+ remove_single_alias $1 facs
+ remove_single_alias $1 HYPO
+ remove_single_alias $1 Hy5
+ remove_single_alias $1 hy5
+}
+
+# Remove publications
+# Arguments:
+#            Input/output file
+remove_publications() {
+ TMPFILE=/tmp/publications.$$.txt
+ sed		\
+	-e 's/^<xnat:publications>/<!--<xnat:publications>/' \
+	-e 's_^</xnat:publications>$_</xnat:publications>-->_' \
+   $1 > $TMPFILE
+ mv $TMPFILE $1
+}
+
+## Main starts here
+
 INDIR=$1
 OUTDIR=$2
 
@@ -9,7 +54,6 @@ REMOVEPROJ=$3
 REMOVEDATA=$4
 
 echo Start $0 $* `date`
-set -e
 
 mkdir -p $OUTDIR
 
@@ -65,6 +109,8 @@ do
          sed -ibak '/^$/d' ${newFile}
 #  echo  rm -f ${newFile}bak
          rm -f ${newFile}bak
+   remove_duplicate_aliases ${newFile}
+   remove_publications      ${newFile}
 
 done 
 
