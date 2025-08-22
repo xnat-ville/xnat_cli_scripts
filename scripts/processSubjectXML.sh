@@ -257,7 +257,7 @@ echo "Index file length:      ${index_length}"
 echo "Index file:             ${INDEX_FILE}"
 
 if [[ $missing_files -ne 0 ]] ; then
-  echo There are ${missing_files} missing that are indexed in ${INDEX_FILE}
+  echo There are ${missing_files} files missing that are indexed in ${INDEX_FILE}
   echo This script will exit
   exit 1
 fi
