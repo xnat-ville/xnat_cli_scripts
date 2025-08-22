@@ -35,9 +35,13 @@ set -e
 url=$(get_xnat_url ${system})
 set +e
 
+echo Start $0 $* `date`
+
 BOILER_PLATE=" -a $auth_string -x $url -e False "
 
 update_subject_xml	\
     "$BASE_FOLDER"	\
     "$BOILER_PLATE --csv $subject_list --output_csv $output_csv"	\
     test_data/subject_xml_processed
+
+echo Complete $0 $* `date`
