@@ -1100,15 +1100,21 @@ def execute_update_subject_xml_from_csv(connection: XNATSession, args: argparse.
         return
 
     tab='\t'
+    error_count = 0
+    subjects_inserted = 0
+    rows_skipped = 0
+    total_rows = 0
     try:
         with open(args.output_csv, "w", encoding="utf-8") as output_csv:
             with open(args.csv_file, mode='r') as file:
                 reader = csv.reader(file, delimiter='\t')
                 for row in reader:
+                    total_rows += 1
                     print(row)
                     if (len(row) == 2):
                         if (row[0].startswith('#')):
                             output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row, tab) + '\n')
+                            rows_skipped += 1
                         else:
                             project_folder = f"{args.input_folder}/{row[0]}"
                             file_path = f"{project_folder}/{row[1]}.xml"
@@ -1118,13 +1124,27 @@ def execute_update_subject_xml_from_csv(connection: XNATSession, args: argparse.
                             row.append(f"RESPONSE_CODE: {response_code}")
                             row.append(time_stamp)
                             output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row, tab) + '\n')
+                            if response_code == 0:
+                                rows_skipped += 1
+                            elif response_code in [200, 201]:
+                                subjects_inserted += 1
+                            else:
+                                error_count += 1
 
                     elif (len(row) > 2):
                         output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row,tab) + '\n')
+                        rows_skipped += 1
 
                     else:
                         print(f"projects.py::execute_update_subject_xml_from_csv: Row found with 0 or 1 entry; we will exit {row}")
                         return
+
+        print(f"Subjects Inserted: {subjects_inserted}")
+        print(f"Rows Skipped:      {rows_skipped}")
+        print(f"Error Count:       {error_count}")
+        print(f"Count Summation:   {subjects_inserted + rows_skipped + error_count}")
+        print(f"Total Rows:        {total_rows}")
+
 
     except Exception as e:
         print(f"[ERROR] Failed to read Subject CSV or upload session XML: {e}")
