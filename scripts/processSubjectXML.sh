@@ -192,6 +192,20 @@ remove_inactive_shared_projects() {
   fi
 }
 
+# Clean subject resources.
+# Replace paths archive/PROJECT/arc001/subjects... with archive/PROJECT/subjects
+# Do not know how the arc001/subjects was introduced. It is for a small
+# number of subjects.
+# We will overwrite the file contents, using a temporary file
+# for intermediate work
+# Arguments:
+#            Path to XML
+clean_subject_resources() {
+  local_tmp=/tmp/arc001.subject.$$.xml
+  sed 's-arc001/subjects-subjects-' ${1} > ${local_tmp}
+  mv ${local_tmp} ${1}
+}
+
 # Remove fixed fields from subject XML and shared project links for
 # projects that are no longer active
 # Arguments:
@@ -206,6 +220,7 @@ process_subject_xml () {
   remove_fixed_fields  ${TMP}
   remove_hidden_fields ${TMP}
   remove_inactive_shared_projects ${1} ${TMP}
+  clean_subject_resources ${TMP}
 
   output_folder=`dirname ${3}`
 # echo mkdir -p ${output_folder}
