@@ -10,22 +10,25 @@ list_subjects_sessions() {
 
     echo "python3 -m xnat_cli_scripts.projects $2 --list --subjects --sessions > $3"
          python3 -m xnat_cli_scripts.projects $2 --list --subjects --sessions > $3
-#         python3 -m xnat_cli_scripts.projects $2 --list --subjects --sessions
 }
 
 # Main starts here
 # Arguments:
 #               authentication string (user or user:password)
 #               system (see common.sh)
+#               projects / subjects file (project TAB subject)
+#               [output file]
 
 if [ $# -lt 3 ]; then
-    echo "Arguments: auth_string system active_projects_file [output file]"
+    echo "Arguments: auth_string system projects_subjects_file [output file]"
     exit 1
 fi
 
+echo Start $0 $* `date`
+
 auth_string="$1"
 system="$2"
-active_projects="$3"
+projects_subjects="$3"
 shift 3
 
 BASE_FOLDER=$(dirname "$0")
@@ -42,5 +45,7 @@ if [[ $# -gt 0 ]] ; then
 fi
 
 # Run the prearchive code listing
-list_subjects_sessions "$BASE_FOLDER" "$BOILER_PLATE --verbose --csv $active_projects " $OUTPUT_FILE
+list_subjects_sessions "$BASE_FOLDER" "$BOILER_PLATE --verbose --csv_projects_subjects $projects_subjects " $OUTPUT_FILE
 
+
+echo Complete $0 $* `date`

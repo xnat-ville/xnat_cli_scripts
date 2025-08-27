@@ -2894,6 +2894,7 @@ def extract_session_label(session_json:{}) -> str:
                 return my_data_fields["label"]
     return "Unknown_session_label"
 
+"""
 
 def execute_list_subjects_sessions(connection: XNATSession, args: argparse.Namespace) -> None:
     project_ids = get_project_ids(connection, args)
@@ -2931,6 +2932,30 @@ def execute_list_subjects_sessions(connection: XNATSession, args: argparse.Names
             subject_index += 1
 
         project_index += 1
+
+"""
+
+def execute_list_subjects_sessions(connection: XNATSession, args: argparse.Namespace) -> None:
+    project_subject_list = get_project_subject_ids(connection, args)
+    subject_count = len(project_subject_list)
+    subject_index = 1
+    tab = "\t"
+    for row in project_subject_list:
+        project=row[0]
+        subject=row[1]
+        xnat_cli_scripts.cli_common.print_stderr(f"{subject_index} / {subject_count} {project} {subject}")
+        try:
+            experiments_path=f"/data/projects/{project}/subjects/{subject}/experiments"
+            experiment_list_json = connection.get_json(experiments_path)
+
+            for experiment in experiment_list_json['ResultSet']['Result']:
+                print(f"{project}{tab}{subject}{tab}{experiment['ID']}")
+
+        except Exception as e:
+            xnat_cli_scripts.cli_common.print_stderr(f"[ERROR] Exception for project {project} subject {subject}: {e}")
+
+        subject_index = subject_index + 1
+
 
 def execute_list_experiments(connection: XNATSession, args: argparse.Namespace):
     project_ids = get_project_ids(connection, args)
