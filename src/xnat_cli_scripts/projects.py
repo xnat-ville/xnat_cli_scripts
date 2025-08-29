@@ -1110,7 +1110,7 @@ def execute_update_subject_xml_from_csv(connection: XNATSession, args: argparse.
                 reader = csv.reader(file, delimiter='\t')
                 for row in reader:
                     total_rows += 1
-                    print(row)
+                    print(f"{total_rows} {row}", flush=True)
                     if (len(row) == 2):
                         if (row[0].startswith('#')):
                             output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row, tab) + '\n')
