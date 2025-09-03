@@ -1244,12 +1244,14 @@ def execute_update_session_xml(connection: XNATSession, args: argparse.Namespace
         return
 
     tab='\t'
+    row_index = 1
     try:
         with open(args.output_csv, "w", encoding="utf-8") as output_csv:
             with open(args.csv_file, mode='r') as file:
                 reader = csv.reader(file, delimiter='\t')
                 for row in reader:
-                    print(row)
+                    print(f"{row_index} {row}", flush=True)
+                    row_index += 1
                     if (len(row) == 3):
                         if (row[0].startswith('#')):
                             output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row, tab) + '\n')
