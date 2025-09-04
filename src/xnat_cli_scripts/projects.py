@@ -2374,14 +2374,17 @@ def execute_get_subject_xml(connection: XNATSession, args: argparse.Namespace) -
             exit(1)
 
         project_id, subject_id = row[0], row[1]
+        if (project_id.startswith("#")):
+            print(f"{subject_index} / {subject_count}  Project {project_id}  Subject {subject_id}  Skip row", flush=True)
+            continue
 
         try:
             output_file = Path(args.output_folder, project_id, f"{subject_id}.xml")
             if output_file.exists():
-                print(f"{subject_index} / {subject_count}  Project {project_id}  Subject {subject_id}  Already exists on disk")
+                print(f"{subject_index} / {subject_count}  Project {project_id}  Subject {subject_id}  Already exists on disk", flush=True)
                 continue
 
-            print(f"{subject_index} / {subject_count}  Project {project_id}  Subject {subject_id}  ")
+            print(f"{subject_index} / {subject_count}  Project {project_id}  Subject {subject_id} Get row", flush=True)
             response = connection.get(f"/data/projects/{project_id}/subjects/{subject_id}?format=xml")
             response.raise_for_status()
 
