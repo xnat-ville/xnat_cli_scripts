@@ -1781,28 +1781,18 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
 
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
-    # Get project IDs
-    project_ids = []
-    if args.csv_file:
-        try:
-            with open(args.csv_file, mode='r') as file:
-                csv_reader = csv.reader(file, delimiter='\t')
-                project_ids = [row[0].strip() for row in csv_reader if row]
-        except Exception as e:
-            print(f"[ERROR] Failed to read CSV file: {e}")
-            return
-    else:
-        print("[INFO] No CSV file provided, attempting to retrieve anonymization scripts for all projects.")
-        try:
-            all_projects = connection.get_json("/data/projects")
-            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
-        except Exception as e:
-            print(f"[ERROR] Failed to retrieve project list: {e}")
-            return
-
     # Fetch and save anonymization scripts
+    project_ids = get_project_ids(connection, args)
+    project_count = len(project_ids)
+    project_index = 1
+
     for project_id in project_ids:
         try:
+            time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            #print(f"{project_index} / {project_count}     {project_id}", flush=True)
+            print("{0:6d} / {1:6d}   {2:25s} {3:s}".format(project_index, project_count, project_id, time_stamp), flush=True)
+            project_index += 1
+
             response = connection.get(f"/data/projects/{project_id}/config/anon")
             response.raise_for_status()
 
@@ -1815,7 +1805,7 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
                 continue
-            print(f"[ERROR] Failed to retrieve anonymization script for project {project_id}: {e}")
+            print(f"[ERROR] Failed to retrieve anonymization script for project {project_id}: {e}", flush=True)
 
     print("[INFO] Anonymization scripts retrieval completed.")
 
