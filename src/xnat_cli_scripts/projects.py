@@ -1753,19 +1753,28 @@ def execute_get_series_import_filter_json(connection: XNATSession, args: argpars
     output_folder = args.output_folder
 
     project_ids = get_project_ids(connection, args)
+    project_count = len(project_ids)
+    project_index = 0
 
     for project_id in project_ids:
         sif_url = f"/data/projects/{project_id}/config/seriesImportFilter"
 
         try:
+            time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            project_index += 1
             response = connection.get_json(sif_url)
             if response:
                 file_path = f"{output_folder}/{project_id}.seriesImportFilter.json"
                 with open(file_path, "w", encoding="utf-8") as f:
                     json.dump(response, f, indent=4)
+            print("{0:6d} / {1:6d}               {2:25s} {3:s}".format(project_index, project_count, project_id, time_stamp), flush=True)
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
+                print("{0:6d} / {1:6d}   404 Error   {2:25s} {3:s}".format(project_index, project_count, project_id, time_stamp), flush=True)
                 continue
+            print(f"[ERROR] Failed to retrieve Series Import filter: {file_path}")
+            print(f"[ERROR] {e}")
+            return
 
     print("[INFO] Successfully saved Series Import Filters.")
 
@@ -1789,7 +1798,6 @@ def execute_get_anon_scripts_json(connection: XNATSession, args: argparse.Namesp
     for project_id in project_ids:
         try:
             time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            #print(f"{project_index} / {project_count}     {project_id}", flush=True)
             print("{0:6d} / {1:6d}   {2:25s} {3:s}".format(project_index, project_count, project_id, time_stamp), flush=True)
             project_index += 1
 
