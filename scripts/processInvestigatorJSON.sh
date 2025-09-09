@@ -35,6 +35,6 @@ BASE_FOLDER=`dirname $0`
 
 sed_project_investigators "$BASE_FOLDER"			\
 	"--input_folder test_data/investigator_json		\
-	--output_folder test_data/modified_investigator_json	\
+	--output_folder test_data/investigator_json_processed	\
 	--csv test_data/inactive_projects.txt "
 
