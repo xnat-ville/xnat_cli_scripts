@@ -61,6 +61,11 @@ dry_run() {
     subject=${project_subject_session[1]}
     session=${project_subject_session[2]}
 
+    if [[ ${project} == "#"* ]] ; then
+      reviewed_files=$(( $reviewed_files + 1 ))
+      continue
+    fi
+
     input_xml_path=$( compute_xml_path  ${my_folder} ${project} ${subject} ${session} )
     if [[ ! -e ${input_xml_path} ]] ; then
       echo Missing: ${input_xml_path}
@@ -228,138 +233,35 @@ mkdir -p "${BASE_OUTDIR}"
 
 dry_run $INDEX_FILE $BASE_INDIR
 
+total_count=`cat ${INDEX_FILE} | wc -l`
+session_index=1
+
 while read -a project_subject_session ; do
   project=${project_subject_session[0]}
   subject=${project_subject_session[1]}
   session=${project_subject_session[2]}
 
-# echo "$project / $subject / $session"
+  if [[ ${project} == "#"* ]] ; then
+    echo "Skip this line ${project} / ${subject} / ${session}"
+    session_index=$(( $session_index + 1 ))
+    continue
+  fi
+
    input_xml_path=$( compute_xml_path  ${BASE_INDIR} ${project} ${subject} ${session} )
   output_xml_path=$( compute_xml_path ${BASE_OUTDIR} ${project} ${subject} ${session} )
   if [[ -f ${output_xml_path} ]] ; then
-    echo "Output XML already exists for $project / $subject/ $session"
+    echo "Output XML already exists for $project / $subject/ $session ($session_index / $total_count)"
+    session_index=$(( $session_index + 1 ))
     continue
   fi
 
   exit_if_no_file ${input_xml_path}
   process_session_xml ${REMOVESHARES} ${input_xml_path} ${output_xml_path}
-  echo "Output XML created for        $project / $subject/ $session"
+  echo "Output XML created for        $project / $subject/ $session ($session_index / $total_count)"
+  session_index=$(( $session_index + 1 ))
 done < ${INDEX_FILE}
 
+echo Files processed: $(( ${session_index} - 1 )) / ${total_count}
 echo Complete $0 $* at `date`
 exit 1
 
-##- for project_folder in $BASE_INDIR/* ; do
-##-   echo $project_folder
-##-   INDIR=$project_folder
-##-   project_name=`basename $INDIR`
-##-   OUTDIR=$BASE_OUTDIR/$project_name
-##- 
-##-   echo $INDIR
-##-   echo $OUTDIR
-##-   mkdir -p $OUTDIR
-##- 
-##-   for file in ${INDIR}/*.xml 
-##-   do
-##-      
-##-      # Create copy of XML in outdir
-##-      echo $file
-##-      basename $file
-##-      justFile=`basename $file` 
-##-      newFile=${OUTDIR}/$justFile
-##-      echo cp -f $file ${OUTDIR} 
-##-           cp -f $file ${OUTDIR} 
-##- 
-##- 
-##-   
-##-      # Remove lines with strings found in remove list 
-##-      #while read removeStr 
-##-      #do
-##-      #   echo ${removeStr}
-##-      #   let i=0
-##-      #   for line in `cat $newFile | grep -n "${removeStr}" | cut -d: -f1`
-##-      #   do
-##-      #      echo ${line}
-##-      #      if [ ! -z "$line" ]; then
-##-      #         let changeLine=${line}-${i}
-##-      #         echo "sed -i \"${changeLine}d\" $newFile"
-##-      #         sed -i "${changeLine}d" $newFile
-##-      #         let i=$i+1
-##-      #      fi
-##-      #   done
-##-      #done < ${REMOVELIST}
-##-   
-##-      # Remove shares with no share project listed -- these are broken share links
-##-      let i=0
-##-      for line in `cat $newFile | grep -n "<xnat:share" | grep -v project | cut -d: -f1`
-##-      do
-##-         let changeLine=${line}-${i}
-##-   #      echo sed \"${changeLine}d\" $newFile
-##-              sed  "${changeLine}d"  $newFile > /tmp/sed.$$.txt
-##-   #      echo mv /tmp/sed.$$.txt $newFile
-##-              mv /tmp/sed.$$.txt $newFile
-##-         let i=$i+1
-##-      done
-##-   
-##-      while read shareProj
-##-      do
-##-         shareStartLine=`cat $newFile | grep -n project=\"${shareProj}\" | cut -d: -f1`
-##-         if [ ! -z "$shareStartLine" ]; then
-##-   #         echo sed \"${shareStartLine}d\" $newFile
-##-                 sed "${shareStartLine}d" $newFile > /tmp/sed.$$.txt
-##-   #         echo mv /tmp/sed.$$.txt $newFile
-##-                 mv /tmp/sed.$$.txt $newFile
-##-         fi
-##-      done < ${REMOVESHARES}
-##-   
-##-      # Remove xml share closure -- XNAT doesn't like it formatted this way and won't upload it
-##-      let i=0
-##-      for line in `cat $newFile | grep -n "</xnat:share>" | cut -d: -f1`
-##-      do
-##-           let changeLine=${line}-${i}
-##-   #        echo sed \"${changeLine}d\" $newFile
-##-                sed  "${changeLine}d"  $newFile > /tmp/sed.$$.txt
-##-   #        echo mv /tmp/sed.$$.txt $newFile
-##-                mv /tmp/sed.$$.txt $newFile
-##-           let i=$i+1
-##-      done
-##-   
-##-      # Add inline closure to any remaining shares
-##-      for line in `cat $newFile | grep -n "<xnat:share" | cut -d: -f1`
-##-      do
-##-   #      echo "sed \"${line}s/>/\/>/\" $newFile"
-##-              sed "${line}s/>/\/>/" $newFile > /tmp/sed.$$.txt
-##-         mv /tmp/sed.$$.txt $newFile
-##-      done   
-##-   
-##-      # If there are no more shares in the XML, we need to remove "sharing"
-##-      areShares=`cat $newFile | grep -n "<xnat:share" | cut -d: -f1`
-##-      if [ -z "${areShares}" ]; then
-##-        let i=0 
-##-        for line in `cat $newFile | grep -n "xnat:sharing" | cut -d: -f1`
-##-        do
-##-           let changeLine=${line}-${i}
-##-           echo "sed \"${changeLine}d\" $newFile"
-##-                 sed  "${changeLine}d" $newFile > /tmp/sed.$$.txt
-##-           mv /tmp/sed.$$.txt $newFile
-##-           let i=$i+1
-##-        done
-##-      fi
-##-   
-##-      # Find/replace strings from replace list 
-##-      #while read findReplaceStr
-##-      #do
-##-      #findStr=`echo $findReplaceStr | cut -d',' -f1`
-##-      #replaceStr=`echo $findReplaceStr | cut -d',' -f2`
-##-      #echo "find\/replace $findStr $replaceStr"
-##-      #if [ ! -z "${findStr}" ]; then
-##-      #   for line in `cat $newFile | grep -n "${findStr}" | cut -d: -f1`
-##-      #   do
-##-      #      echo "sed -i \"${line}s/${findStr}/${replaceStr}/g\" $newFile"
-##-      #      sed -i "${line}s/${findStr}/${replaceStr}/g" $newFile
-##-      #   done
-##-      #fi
-##-      #done < ${REPLACELIST}   
-##-    
-##-   done 
-##- done
