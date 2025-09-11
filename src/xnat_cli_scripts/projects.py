@@ -522,6 +522,7 @@ def execute_update_prearchive_code(connection: XNATSession, args: argparse.Names
         return
 
     try:
+        project_index = 1
         with open(args.csv_file, mode='r') as file:
             csv_reader = csv.reader(file, delimiter='\t')
             for row in csv_reader:
@@ -535,12 +536,15 @@ def execute_update_prearchive_code(connection: XNATSession, args: argparse.Names
                 url = f"/data/projects/{project_id}/prearchive_code/{new_code}"
                 response = connection.put(url)
 
-                apply_sleep(args)
+                time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
                 if response.status_code == 200:
-                    print(f"{project_id}\t{new_code}\tUPDATED")
+                    print(f"{project_index}\t{project_id}\t{new_code}\tUPDATED\t{time_stamp}", flush=True)
                 else:
-                    print(f"{project_id}\t{new_code}\tERROR\t{response.status_code}: {response.text}")
+                    print(f"{project_index}\t{project_id}\t{new_code}\tERROR\t{response.status_code}: {response.text}\t{time_stamp}", flush=True)
+
+                project_index += 1
+                apply_sleep(args)
     except Exception as e:
         print(f"[ERROR] Failed to process CSV file: {e}")
 
@@ -2051,36 +2055,41 @@ def execute_get_resource_config(connection: XNATSession, args: argparse.Namespac
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
     # Get project IDs
-    project_ids = []
-    if args.csv_file:
-        try:
-            with open(args.csv_file, mode='r') as file:
-                csv_reader = csv.reader(file, delimiter='\t')
-                project_ids = [row[0].strip() for row in csv_reader if row]
-        except Exception as e:
-            print(f"[ERROR] Failed to read CSV file: {e}")
-            return
-    else:
-        try:
-            all_projects = connection.get_json("/data/projects")
-            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
-        except Exception as e:
-            print(f"[ERROR] Failed to retrieve project list: {e}")
-            return
+    project_ids = get_project_ids(connection, args)
+    project_index = 0
+    project_count = len(project_ids)
 
     for project_id in project_ids:
         try:
-            response = connection.get(f"/data/projects/{project_id}/config/resource_config")
+            time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            project_index += 1
+
+            url_path = f"/data/projects/{project_id}/config/resource_config"
+            print(url_path, flush=True)
+            response = connection.get(f"/data/projects/{project_id}/config/resource_config", accepted_status=[200,404])
             if response.status_code == 200:
                 json_data = response.json()
                 out_path = Path(args.output_folder) / f"{project_id}.resource_config.json"
                 with open(out_path, "w", encoding="utf-8") as f:
                     json.dump(json_data, f, indent=4)
+                print("{0:6d} / {1:6d}               {2:25s} {3:s}".format(project_index, project_count, project_id, time_stamp), flush=True)
+            elif response.status_code == 404:
+                print("{0:6d} / {1:6d}   404 Error   {2:25s} {3:s}".format(project_index, project_count, project_id, time_stamp), flush=True)
+            else:
+                print("{0:6d} / {1:6d} Unknown Error {2:25s} {3:s}".format(project_index, project_count, project_id, time_stamp), flush=True)
+                print(response, flush=True)
+
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
-                continue  # Skip silently if resource_config does not exist
+                xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: 404 Error for session {session_id}: {e}")
+                print("{0:6d} / {1:6d}   404 Error   {2:25s} {3:s}".format(project_index, project_count, project_id, time_stamp), flush=True)
+                continue
+            else:
+                print(f"[ERROR] {project_id}: {e}")
+
         except Exception as e:
             print(f"[ERROR] {project_id}: {e}")
+            return
 
     print("[INFO] Resource config JSON retrieval complete.")
 
@@ -2560,36 +2569,29 @@ def execute_get_project_resources_json(connection: XNATSession, args: argparse.N
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
     # Get project IDs
-    project_ids = []
-    if args.csv_file:
-        try:
-            with open(args.csv_file, mode='r') as file:
-                csv_reader = csv.reader(file, delimiter='\t')
-                project_ids = [row[0].strip() for row in csv_reader if row]
-        except Exception as e:
-            print(f"[ERROR] Failed to read CSV file: {e}")
-            return
-    else:
-        try:
-            all_projects = connection.get_json("/data/projects")
-            project_ids = [proj['ID'] for proj in all_projects.get('ResultSet', {}).get('Result', [])]
-        except Exception as e:
-            print(f"[ERROR] Failed to retrieve project list: {e}")
-            return
+    project_ids = get_project_ids(connection, args)
+    project_index = 0
+    project_count = len(project_ids)
 
     for project_id in project_ids:
         try:
+            time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            project_index += 1
+
             response = connection.get(f"/data/projects/{project_id}/resources?format=json")
             if response.status_code == 200:
                 json_data = response.json()
                 out_path = Path(args.output_folder) / f"{project_id}.resources.json"
                 with open(out_path, "w", encoding="utf-8") as f:
                     json.dump(json_data, f, indent=4)
+                print("{0:6d} / {1:6d}               {2:25s} {3:s}".format(project_index, project_count, project_id, time_stamp), flush=True)
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
+                print("{0:6d} / {1:6d}   404 Error   {2:25s} {3:s}".format(project_index, project_count, project_id, time_stamp), flush=True)
                 continue  # Skip if resources not found
         except Exception as e:
             print(f"[ERROR] {project_id}: {e}")
+            return
 
     print("[INFO] Project resources JSON retrieval complete")
 
