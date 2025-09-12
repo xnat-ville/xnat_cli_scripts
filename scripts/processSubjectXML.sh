@@ -277,6 +277,8 @@ if [[ $missing_files -ne 0 ]] ; then
   exit 1
 fi
 
+subject_count=`cat ${INDEX_FILE} | wc -l`
+completed_subjects=0
 while read -a project_subject ; do
   project=${project_subject[0]}
   subject=${project_subject[1]}
@@ -291,6 +293,8 @@ while read -a project_subject ; do
 
   exit_if_no_file ${input_xml_path}
   process_subject_xml ${REMOVESHARES} ${input_xml_path} ${output_xml_path}
+  completed_subjects=$(( $completed_subjects + 1 ))
+  echo "${completed_subjects} / ${subject_count}"
 done < ${INDEX_FILE}
 
 

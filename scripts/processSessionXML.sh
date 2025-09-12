@@ -89,6 +89,48 @@ dry_run() {
 }
 
 
+# Remove investigator
+# We will overwrite the file contents, using a temporary file
+# for intermediate work
+# Arguments:
+#            Path to XML
+remove_investigator() {
+  local_tmp=/tmp/investigator.$$.xml
+
+  invStartLines=`cat $1 | grep -n '<xnat:investigator'   | cut -d: -f1 | sort -r -n`
+    invEndLines=`cat $1 | grep -n '</xnat:investigator>' | cut -d: -f1 | sort -r -n`
+
+  if [ ! -z "$invStartLines" ] && [ ! -z "$invEndLines" ]; then
+    echo "Start Line " ${invStartLines}
+    echo "End Line   " ${invEndLines}
+
+    IFS=' ' read    -a startArray <<< ${invStartLines}
+    IFS=' ' read    -a endArray   <<< ${invEndLines}
+
+    echo startArray ${startArray}
+
+    index=0
+    for startLine in ${startArray[@]} ; do
+      endLine=${endArray[$index]}
+      echo "sed  ${startLine},${endLine}d  $1 > $local_tmp"
+            sed "${startLine},${endLine}d" $1 > $local_tmp
+      mv $local_tmp $1
+#     echo ${startLine} / ${endLine}
+      index=$(( $index + 1 ))
+    done
+    
+
+#   echo "sed  ${invStartLine},${invEndLine}d  $1"
+#   echo Start Line 
+#   echo "Start Line " ${invStartLine}
+#   echo "End Line   " ${invEndLine}
+#   echo "sed  ${invStartLine},${invEndLine}d  $1 > $local_tmp"
+#         sed "${invStartLine},${invEndLine}d" $1 > $local_tmp
+#   mv $local_tmp $1
+  fi
+}
+
+
 # Remove broken shares
 # We will overwrite the file contents, using a temporary file
 # for intermediate work
@@ -105,7 +147,7 @@ remove_broken_shares() {
   do
 #   echo "sed ${line}d ${1} > ${local_tmp}"
           sed ${line}d ${1} > ${local_tmp}
-#   echo "mv ${local_tmp} ${1}"
+    echo "mv ${local_tmp} ${1}"
           mv ${local_tmp} ${1}
   done
 }
@@ -204,6 +246,7 @@ process_session_xml () {
   TMP=/tmp/$$.xml
   cp ${2} ${TMP}
 
+  remove_investigator  ${TMP}
   remove_broken_shares ${TMP}
   remove_inactive_shared_projects ${1} ${TMP}
 
@@ -257,7 +300,7 @@ while read -a project_subject_session ; do
 
   exit_if_no_file ${input_xml_path}
   process_session_xml ${REMOVESHARES} ${input_xml_path} ${output_xml_path}
-  echo "Output XML created for        $project / $subject/ $session ($session_index / $total_count)"
+  echo "Output XML created for        $project / $subject / $session ($session_index / $total_count)"
   session_index=$(( $session_index + 1 ))
 done < ${INDEX_FILE}
 
