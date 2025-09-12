@@ -1278,6 +1278,8 @@ def execute_update_session_xml(connection: XNATSession, args: argparse.Namespace
                         print(f"projects.py::execute_update_session_xml_from_csv: Row found with 0, 1 or 2 entries; we will exit {row}")
                         return
 
+                    output_csv.flush();
+
     except Exception as e:
         print(f"[ERROR] Failed to read Session CSV or upload session XML: {e}")
         return
