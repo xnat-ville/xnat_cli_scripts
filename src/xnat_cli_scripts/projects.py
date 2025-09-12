@@ -1143,6 +1143,8 @@ def execute_update_subject_xml_from_csv(connection: XNATSession, args: argparse.
                         print(f"projects.py::execute_update_subject_xml_from_csv: Row found with 0 or 1 entry; we will exit {row}")
                         return
 
+                    output_csv.flush();
+
         print(f"Subjects Inserted: {subjects_inserted}")
         print(f"Rows Skipped:      {rows_skipped}")
         print(f"Error Count:       {error_count}")
@@ -2315,17 +2317,21 @@ def execute_get_session_xml(connection: XNATSession, args: argparse.Namespace) -
     for row in session_entries:
         session_index += 1
         if len(row) < 3:
+            print(f"{session_index} / {session_count}   {row} Bad row", flush=True)
             continue  # skip invalid rows
 
         project_id, subject_id, session_id = row[0], row[1], row[2]
+        if (project_id.startswith("#")):
+            print(f"{session_index} / {session_count}  Project {project_id}  Subject {subject_id}  Session {session_id}  Skip row", flush=True)
+            continue
 
         try:
             output_file = Path(args.output_folder, project_id, f"{session_id}.xml")
             if output_file.exists():
-                print(f"{session_index} / {session_count}  Project {project_id}  Subject {subject_id}  Session {session_id}  Already exists on disk ")
+                print(f"{session_index} / {session_count}  Project {project_id}  Subject {subject_id}  Session {session_id}  Already exists on disk ", flush=True)
                 continue
 
-            print(f"{session_index} / {session_count}  Project {project_id}  Subject {subject_id}  Session {session_id}  ")
+            print(f"{session_index} / {session_count}  Project {project_id}  Subject {subject_id}  Session {session_id}  ", flush=True)
             response = connection.get(f"/data/experiments/{session_id}?format=xml")
             response.raise_for_status()
 
