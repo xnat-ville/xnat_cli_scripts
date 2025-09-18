@@ -40,6 +40,14 @@ def read_text_file(file_path: str) -> str:
         file.close()
         return content
 
+def read_text_file_into_set(file_path: str) ->  {}:
+    my_set = set(open(file_path).read().split())
+    return my_set
+
+def read_text_file_into_list(file_path: str) ->  []:
+    my_list = open(file_path).read().split("\n")
+    return my_list
+
 def read_json_file(file_path: str):
     with open(file_path, "r") as file:
         content = json.load(file)

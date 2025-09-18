@@ -9,6 +9,7 @@ import argparse
 import warnings
 from pathlib import Path
 from os import listdir
+import xml.etree.ElementTree as ET
 import json
 import xnat_cli_scripts.cli_common
 
@@ -148,21 +149,94 @@ def remove_datatypes_master(args: argparse.Namespace) -> None:
     else:
         print("remove_datatypes_master: did not recognize target object. Expected project_json flag")
 
+def whitelist_session_xml_assessor_datatypes(args: argparse.Namespace) -> None:
+    print("whitelist_session_xml_assessor_datatypes")
+    if (not args.input_file) and (not args.output_file):
+        print(f"Missing --input_file and/or --output_file for whitelist_session_xml_assessor_datatypes {args}")
+        exit(1)
+
+    white_list = xnat_cli_scripts.cli_common.read_text_file_into_set(args.assessor_datatypes)
+    try:
+        session_tree = ET.parse(args.input_file)
+        session_root = session_tree.getroot()
+        element_count = len(session_root)
+
+        assessors_to_remove = []
+
+        assessor_elements = session_root.find('{http://nrg.wustl.edu/xnat}assessors')
+        if assessor_elements is not None:
+            index = 0
+            assessor_count = len(assessor_elements)
+            for assessor in assessor_elements.findall('{http://nrg.wustl.edu/xnat}assessor'):
+                data_type = assessor.attrib['{http://www.w3.org/2001/XMLSchema-instance}type']
+                assessor_id: str = assessor.attrib['ID']
+                index += 1
+                if data_type not in white_list:
+                    print(f"Removing datatype {data_type}")
+                    assessors_to_remove.append(assessor_id)
+                else:
+                    print(f"Retain {data_type}")
+
+            # This next part is ugly. We read the XML line by line and then remove lines
+            # that corresponds to the data types we have not whitelisted.
+            # Wish we could have just done that with XML processing, but the library we chose
+            # collapses name spaces. I did not want to alter the XNAT defined namespaces.
+            raw_xml = xnat_cli_scripts.cli_common.read_text_file_into_list(args.input_file)
+
+            data_types_removed = 0
+            xml_length = len(raw_xml)
+            last_assessor_close = -1
+            for index in range(xml_length - 1, -1, -1):
+                this_line = raw_xml[index]
+                if '<!--hidden_fields' in this_line:
+                    pass
+                elif '</xnat:assessor>' in this_line:
+                    # This is the closing line of an assessor. Store the index
+                    # Ask we back over the lines in the file, we should find the first line in the assessor.
+                    last_assessor_close = index
+                else:
+                    match = next((x for x in assessors_to_remove if x in this_line), False)
+                    if match:
+                        print(f"{index} {last_assessor_close} {this_line}")
+                        del raw_xml[index:last_assessor_close]
+                        last_assessor_close = -1
+
+        with open(args.output_file, "w") as outfile:
+            outfile.write("\n".join(raw_xml))
+            outfile.close()
+
+    except Exception as e:
+        print(f"Exception for {args.input_file}")
+        print(e)
+        exit(1)
+
+def whitelist_datatypes_master(args: argparse.Namespace) -> None:
+    if (args.session_xml and args.assessor_datatypes):
+        whitelist_session_xml_assessor_datatypes(args)
+    else:
+        print(f"Arguments are incomplete for the whitelist_datatypes request {args}")
+        exit(1)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Perform file modifications")
 
-    parser.add_argument('--remove_projects',   dest='remove_projects',   help='Remove projects from JSON or XML file',     action='store_true')
-    parser.add_argument('--remove_datatypes',  dest='remove_datatypes',  help='Remove datatypes from JSON or XML file',    action='store_true')
-    parser.add_argument('--investigator_json', dest='investigator_json', help="Extract investigator JSON",                 action='store_true')
-    parser.add_argument('--project_json',      dest='project_json',      help="Extract project JSON",                      action='store_true')
+    parser.add_argument('--remove_projects',     dest='remove_projects',     help='Remove projects from JSON or XML file',     action='store_true')
+    parser.add_argument('--remove_datatypes',    dest='remove_datatypes',    help='Remove datatypes from JSON or XML file',    action='store_true')
+    parser.add_argument('--whitelist_datatypes', dest='whitelist_datatypes', help='Whitelist/retain specific datatypes',       action='store_true')
 
-    parser.add_argument('--exclude',           dest='exclude',           help="Exclude objects if all subobjects removed", action='store_true')
+    parser.add_argument('--investigator_json',   dest='investigator_json',   help="Extract investigator JSON",                 action='store_true')
+    parser.add_argument('--project_json',        dest='project_json',        help="Extract project JSON",                      action='store_true')
+    parser.add_argument('--session_xml',         dest='session_xml',         help="Apply operation to Session XML",            action='store_true')
+    parser.add_argument('--assessor_datatypes',  dest='assessor_datatypes',  help="Path to Assessor datatypes to retain")
 
-    parser.add_argument('--output_folder',     dest='output_folder',     help="Folder to store output JSON files")
-    parser.add_argument('--input_folder',      dest='input_folder',      help='Input folder of JSON or XML files')
-    parser.add_argument('--csv',               dest='csv_file',          help='Path to CSV file')
+    parser.add_argument('--exclude',             dest='exclude',             help="Exclude objects if all subobjects removed", action='store_true')
 
+    parser.add_argument('--output_folder',       dest='output_folder',       help="Folder to store output JSON files")
+    parser.add_argument('--input_folder',        dest='input_folder',        help='Input folder of JSON or XML files')
+    parser.add_argument('--csv',                 dest='csv_file',            help='Path to CSV file')
+    parser.add_argument('--input_file',          dest='input_file',          help="Path to one input file")
+    parser.add_argument('--output_file',         dest='output_file',         help="Pato to one output file")
 
     args = parser.parse_args()
 
@@ -171,6 +245,8 @@ if __name__ == "__main__":
         remove_projects_master(args)
     elif args.remove_datatypes:
         remove_datatypes_from_projects(args)
+    elif args.whitelist_datatypes:
+        whitelist_datatypes_master(args)
     else:
         print("[ERROR] No valid action specified.")
 
