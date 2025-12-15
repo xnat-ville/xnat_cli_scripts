@@ -1038,18 +1038,19 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
     if args.input_folder is None:
         raise Exception("projects --update --project_xml requires --input_folder")
 
-    project_ids = []
-    if args.csv_file:
-        project_ids = get_project_ids(connection, args)
-    else:
-        try:
-            listing = listdir(args.input_folder)
-            for f in listing:
-                # File name should be something like Project_ID.xml
-                id = f.split('.')[0]
-                project_ids.append(id)
-        except Exception as e:
-            raise Exception(f"[ERROR] Exception while getting list of files in folder: {args.input_folder}\n{e}")
+    project_ids = get_project_ids(connection, args)
+#   project_ids = []
+#   if args.csv_file:
+#       project_ids = get_project_ids(connection, args)
+#   else:
+#       try:
+#           listing = listdir(args.input_folder)
+#           for f in listing:
+#               # File name should be something like Project_ID.xml
+#               id = f.split('.')[0]
+#               project_ids.append(id)
+#       except Exception as e:
+#           raise Exception(f"[ERROR] Exception while getting list of files in folder: {args.input_folder}\n{e}")
 
     try:
         http_headers = {}
@@ -1062,7 +1063,7 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
             if (not id.startswith("#")):
                 upload_project_xml_template(connection, args, id)
                 file_path=f"{args.input_folder}/{id}.xml"
-                print(f"{project_index} / {project_count} / {id}.xml")
+                print(f"{project_index} / {project_count} / {id}.xml", flush=True)
                 with open(file_path) as xml_file:
                     put_path = f"/data/projects/{id}"
                     print(f"Upload project XML: {put_path}")
@@ -1070,7 +1071,7 @@ def execute_update_project_xml(connection: XNATSession, args: argparse.Namespace
                     xml_file.close()
             project_index += 1
     except Exception as e:
-        print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}")
+        print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}", flush=True)
 
 
 def put_subject_xml(connection: XNATSession, project_id: str, file_path: str):
@@ -1228,11 +1229,11 @@ def put_session_xml(connection: XNATSession, project_id: str, file_path: str):
                 xml_file.close()
                 return response.status_code
         else:
-            return 0
+            return "Not-owned by-project"
     except Exception as e:
         print(f"Exception for {file_path}")
         print(e)
-        return 1
+        return "Exception"
 
 
 def execute_update_session_xml(connection: XNATSession, args: argparse.Namespace) -> None:
@@ -1930,99 +1931,17 @@ def execute_get_project_json(connection: XNATSession, args: argparse.Namespace) 
 def execute_get_project_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     Path(args.output_folder).mkdir(parents=True, exist_ok=True)
 
-    project_ids = []
-    if args.csv_file:
-        with open(args.csv_file, mode='r') as file:
-            csv_reader = csv.reader(file, delimiter='\t')
-            for row in csv_reader:
-                project_ids.append(row[0])  # Assuming the project ID is in the first column
-    else:
-        all_projects = connection.get_json(f"/data/projects")
-        result = all_projects['ResultSet']['Result']
-        for project_json in result:
-            project_ids.append(project_json['ID'])
+    project_ids = get_project_ids(connection, args)
 
     project_count = len(project_ids)
     project_index = 1
     for id in project_ids:
-        if args.verbose:
-            print(f"{project_index} / {project_count} / {id}")
-            project_index += 1
+        print(f"{project_index} / {project_count} / {id}", flush=True)
+        project_index += 1
 
         xml = connection.get(f"/data/projects/{id}?format=xml")
         with open(f"{args.output_folder}/{id}.xml", "w") as f:
             f.write(xml.content.decode("utf-8"))
-
-'''
-        project_folder = Path(args.output_folder) / project_id
-        project_folder.mkdir(parents=True, exist_ok=True)
-
-        subject_file = project_folder / f"{subject_id}.subject.json"
-        #print(subject_file)
-        time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        if (subject_file.exists()):
-            print(f"{time_stamp}    Subject file exists {subject_file}")
-        else:
-            print(f"{time_stamp}    Need to retrieve subject json {project_id}/{subject_id}")
-            try:
-                response = connection.get(f"/data/subjects/{subject_id}", format="json", timeout=300)
-                subject_json = response.json()
-
-                with open(subject_file, "w", encoding="utf-8") as f:
-                    json.dump(subject_json, f, indent=4)
-                    f.close()
-
-            except Exception as e:
-                print(f"[ERROR] Failed to fetch/save subject {subject_id} in project {project_id}: {e}")
-'''
-#    project_ids = get_project_ids(connection, args)
-#
-#    project_count = len(project_ids)
-#    project_index = 1
-#
-#    for project_id in project_ids:
-#        if args.verbose:
-#            subject_count = 0
-#            subject_index = 0
-#
-#            xnat_cli_scripts.cli_common.print_stderr(f"Project {project_id} / {project_index} / {project_count}   NA {subject_index} / {subject_count}")
-#
-#        project_folder = Path(args.output_folder) / project_id
-#        project_folder.mkdir(parents=True, exist_ok=True)
-#
-#        try:
-#            subject_list = connection.get_json(f"/data/projects/{project_id}/subjects")
-#            subjects = subject_list.get('ResultSet', {}).get('Result', [])
-#        except Exception as e:
-#            print(f"[ERROR] Failed to fetch subjects for {project_id}: {e}")
-#            continue  # Move on to the next project
-#
-#        subject_count = len(subjects)
-#        subject_index = 1
-#        for subject in subjects:
-#            subject_id = subject.get('ID')
-#            if args.verbose:
-#                xnat_cli_scripts.cli_common.print_stderr(f"Project {project_id} / {project_index} / {project_count}   {subject_id} {subject_index} / {subject_count}")
-#                subject_index += 1
-#
-#            if not subject_id or 'label' not in subject:
-#                continue  # Skip malformed entries
-#
-#            try:
-#                response = connection.get(f"/data/subjects/{subject_id}", format="json", timeout=300)
-#                subject_json = response.json()
-#
-#                output_file = project_folder / f"{subject_id}.subject.json"
-#                with open(output_file, "w", encoding="utf-8") as f:
-#                    json.dump(subject_json, f, indent=4)
-#
-#            except Exception as e:
-#                print(f"[ERROR] Failed to fetch/save subject {subject_id} in project {project_id}: {e}")
-#
-#        project_index += 1
-#
-
-# This ver
 
 def execute_get_subject_demographics_json(connection: XNATSession, args: argparse.Namespace) -> None:
     # Check if output folder is provided
