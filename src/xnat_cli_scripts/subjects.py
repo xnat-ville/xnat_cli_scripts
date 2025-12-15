@@ -55,10 +55,19 @@ def execute_list_projects_subjects(connection: XNATSession, args: argparse.Names
             xnat_cli_scripts.cli_common.print_stderr(f"{project_id}{tab}{project_index} / {project_count}")
 
         get_path = f"/data/projects/{project_id}/subjects"
-        subjects_json = connection.get_json(get_path)
-        subject_ids = [subject['ID'] for subject in subjects_json['ResultSet']['Result']]
-        for subject_id in subject_ids:
-            print(f"{project_id}{tab}{subject_id}")
+        try:
+            subjects_json = connection.get_json(get_path)
+
+            subject_ids = [subject['ID'] for subject in subjects_json['ResultSet']['Result']]
+            for subject_id in subject_ids:
+                print(f"{project_id}{tab}{subject_id}")
+
+        except xnat.exceptions.XNATResponseError as e:
+            if "404" in str(e):
+                continue
+            else:
+                raise e
+
         project_index += 1
 
 
