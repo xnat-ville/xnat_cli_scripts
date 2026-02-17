@@ -1213,6 +1213,81 @@ def execute_update_subject_xml(connection: XNATSession, args: argparse.Namespace
         print(f"[ERROR] Exception while uploading project XML: {file_path}.xml\n{e}")
 
 
+def put_any_xml(connection: XNATSession, project_id: str, file_path: str):
+    http_headers = {'Content-Type': 'application/xml'}
+
+    try:
+        session_tree = ET.parse(file_path)
+        session_root = session_tree.getroot()
+        session_project = session_root.attrib['project']
+        if project_id == session_project:
+            print(f"{file_path} {session_project}")
+            with open(file_path) as xml_file:
+#               put_path = f"/data/projects/{project_id}/experiments/{session_id}"
+                put_path = f"/xapi/archive/upload/xml"
+                query_dictionary={"allowDataDeletion": "true", "event_action":"REST"}
+                print(f"{put_path} {query_dictionary}")
+                response = connection.put(put_path, data=xml_file, headers=http_headers, accepted_status=[200,201,400,500], query=query_dictionary, timeout=200.)
+                xml_file.close()
+                return response.status_code
+        else:
+            return "Not-owned by-project"
+    except Exception as e:
+        print(f"Exception for {file_path}")
+        print(e)
+        return "Exception"
+
+def execute_update_non_session_xml(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+    Update/upload non-session XML by reading XML for individual files in an input folder.
+    """
+
+    if args.input_folder is None:
+        raise Exception("projects --update --non_session_xml requires --input_folder")
+    if args.csv_file is None:
+        print(f"projects.py::execute_update_non_session_xml_from_csv No input CSV file specified.")
+        return
+    if args.output_csv is None:
+        print(f"projects.py::execute_update_non_session_xml_from_csv No output CSV file specified.")
+        return
+
+    tab='\t'
+    row_index = 1
+    try:
+        with open(args.output_csv, "w", encoding="utf-8") as output_csv:
+            with open(args.csv_file, mode='r') as file:
+                reader = csv.reader(file, delimiter='\t')
+                for row in reader:
+                    print(f"{row_index} {row}", flush=True)
+                    row_index += 1
+                    if (len(row) == 3):
+                        if (row[0].startswith('#')):
+                            output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row, tab) + '\n')
+                        else:
+                            project_folder = f"{args.input_folder}/{row[0]}"
+                            file_path = f"{project_folder}/{row[2]}.xml"
+                            print(file_path)
+                            response_code = put_any_xml(connection, row[0], file_path)
+                            time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            row.append(f"RESPONSE_CODE: {response_code}")
+                            row.append(time_stamp)
+                            output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row, tab) + '\n')
+
+                    elif (len(row) > 2):
+                        output_csv.write(xnat_cli_scripts.cli_common.convert_array_to_string(row,tab) + '\n')
+
+                    else:
+                        print(f"projects.py::execute_update_non_session_xml_from_csv: Row found with 0, 1 or 2 entries; we will exit {row}")
+                        return
+
+                    output_csv.flush();
+
+    except Exception as e:
+        print(f"[ERROR] Failed to read Session CSV or upload non-session XML: {e}")
+        return
+
+
+
 def put_session_xml(connection: XNATSession, project_id: str, file_path: str):
     http_headers = {'Content-Type': 'application/xml'}
 
@@ -1225,7 +1300,7 @@ def put_session_xml(connection: XNATSession, project_id: str, file_path: str):
             print(f"{file_path} {session_project}")
             with open(file_path) as xml_file:
                 put_path = f"/data/projects/{project_id}/experiments/{session_id}"
-                response = connection.put(put_path, data=xml_file, headers=http_headers, accepted_status=[200,201,400,500])
+                response = connection.put(put_path, data=xml_file, headers=http_headers, accepted_status=[200,201,400,500], timeout=200.)
                 xml_file.close()
                 return response.status_code
         else:
@@ -1238,11 +1313,11 @@ def put_session_xml(connection: XNATSession, project_id: str, file_path: str):
 
 def execute_update_session_xml(connection: XNATSession, args: argparse.Namespace) -> None:
     """
-    Update/upload project XML by reading XML for individual files in an input folder.
+    Update/upload session XML by reading XML for individual files in an input folder.
     """
 
     if args.input_folder is None:
-        raise Exception("projects --update --project_xml requires --input_folder")
+        raise Exception("projects --update --session_xml requires --input_folder")
     if args.csv_file is None:
         print(f"projects.py::execute_update_session_xml_from_csv No input CSV file specified.")
         return
@@ -1682,6 +1757,8 @@ def execute_update_master(connection: XNATSession, args: argparse.Namespace) -> 
         execute_update_subject_xml(connection, args)
     elif args.session_xml:
         execute_update_session_xml(connection, args)
+    elif args.non_session_xml:
+        execute_update_non_session_xml(connection, args)
     elif args.tracer_json:
         execute_update_tracer_json(connection, args)
     elif args.prearchive_code:
@@ -2913,10 +2990,53 @@ def execute_get_subjects_list(connection: XNATSession, project_id: str) -> [] :
 
     return subjects_list
 
+def execute_are_present(connection: XNATSession, args: argparse.Namespace) -> None:
+    test_experiments = create_experiment_dictionary(args.test_experiments)
+    reference_experiments = create_experiment_dictionary(args.reference_experiments)
+    reference_keys = reference_experiments.keys()
+    count_missing = 0
+    count_not_equal = 0
+    total_values=len(reference_keys)
+    missing_or_errant = []
+
+    for k in reference_keys:
+        reference_value = reference_experiments[k]
+        if k in test_experiments and test_experiments[k] == reference_value:
+            # All good
+            pass
+        elif k in test_experiments:
+            print(f"Test value {test_experiments[k]} differs from {reference_experiments[k]} for {k}")
+            missing_or_errant.append(k)
+            count_not_equal += 1
+        else:
+            print(f"No test value present for {k}")
+            missing_or_errant.append(k)
+            count_missing += 1
+
+    print(f"Missing {count_missing}, Not Equal {count_not_equal}, Total Keys {total_values}")
+    if (args.csv_file):
+        with open(args.csv_file, "w") as csv_output:
+            for experiment in missing_or_errant:
+                print(experiment, file=csv_output)
+
+def create_experiment_dictionary(file_path: str) -> dict:
+    d = dict()
+    with open(file_path, "r") as f:
+        for experiment_line in f:
+            tokens = experiment_line.split()
+            experiment_key = f"{tokens[0]}\t{tokens[1]}"
+            experiment_label = tokens[2]
+            d[experiment_key] = experiment_label
+
+    return d
+
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="List projects from an XNAT system")
+    parser.add_argument('--no_xnat',               dest='no_xnat',                  help='Do not make a connection to an XNAT',          action='store_true')
     parser.add_argument('-x', '--xnat',            dest='url',                      help="URL to XNAT, default is https://cnda.wustl.edu")
-    parser.add_argument('-a', '--auth',            dest='auth',                     help="User authentication/login for access to XNAT", required=True)
+    parser.add_argument('-a', '--auth',            dest='auth',                     help="User authentication/login for access to XNAT")
     parser.add_argument('-p', '--password',        dest='password',                 help="Password for XNAT authentication", required=False)
     parser.add_argument('-e', '--extension_types', dest='extension_types',          help="True or False for extension_types in xnat.connect")
 
@@ -2925,6 +3045,7 @@ if __name__ == "__main__":
     parser.add_argument('-R', '--remove',          dest='remove',                   help='Remove groups from projects',                action='store_true')
     parser.add_argument(        '--update',        dest='update',                   help='Update project accessibilities',             action='store_true')
     parser.add_argument(        '--get',           dest='get',                      help='Get a certain type of object at Project Level', action='store_true')
+    parser.add_argument(        '--are_present',  dest='are_present',               help="Test to see if experiments are present",     action='store_true')
 
     # These are objects of the operations; 
     parser.add_argument('-u', '--users',           dest='users',                    help='Listing Verb object: Users',                 action='store_true')
@@ -2946,7 +3067,8 @@ if __name__ == "__main__":
     parser.add_argument(      '--container_service',dest='container_service',       help="Retrieve container_service for projects",    action='store_true')
     parser.add_argument(       '--complete_subject_json',dest='complete_subject_json',help="Retrieve entire subject JSONs by session ID",        action='store_true')
     parser.add_argument(       '--session_json',   dest='session_json',             help="Retrieve session JSONs by session ID",       action='store_true')
-    parser.add_argument(       '--session_xml',    dest='session_xml',              help="Retrieve session XML files by session ID",   action='store_true')
+    parser.add_argument(       '--session_xml',    dest='session_xml',              help="Datatype for operation is session XML",      action='store_true')
+    parser.add_argument(       '--non_session_xml',dest='non_session_xml',          help="Datatype for operation is non-session XML",  action='store_true')
     parser.add_argument(       '--subject_xml',    dest='subject_xml',              help="Retrieve subject XML files by session ID",   action='store_true')
     parser.add_argument(       '--experiments',    dest='experiments',              help="Include experiments in output list",         action='store_true')
     parser.add_argument(       '--bids',           dest='bids',                     help="Interacts with XNAT BIDS configuration",     action='store_true')
@@ -2956,6 +3078,9 @@ if __name__ == "__main__":
     parser.add_argument(       '--separate_petmr', dest='separate_petmr',           help="Interacts with separate petmr project config", action='store_true')
     parser.add_argument(       '--split_petmr_sessions', dest='split_petmr_sessions', help="Interacts with split petmr project config", action='store_true')
     parser.add_argument(       '--scan_quality',   dest='scan_quality',             help="Interacts with split petmr project config",   action='store_true')
+    parser.add_argument(       '--test_experiments', dest='test_experiments',            help="File with list of experiments to be tested")
+    parser.add_argument(       '--reference_experiments', dest='reference_experiments',    help="File with list of reference experiments")
+
 
     ## Further modifiers
     parser.add_argument('-b', '--brief',           dest='brief_format',             help="List in brief format",                       action='store_true')
@@ -2971,13 +3096,16 @@ if __name__ == "__main__":
     parser.add_argument(      '--template',        dest='template',                 help='Path to a template file')
     args = parser.parse_args()
 
-    args.url = "localhost:8080" if args.url is None else args.url
+    if (args.no_xnat):
+        session = None
+    else:
+        args.url = "localhost:8080" if args.url is None else args.url
 
-    auth_user = xnat_cli_scripts.cli_common.extract_auth_user(args)
-    auth_password = xnat_cli_scripts.cli_common.extract_auth_password(args)
-    xnat_extensions = xnat_cli_scripts.cli_common.extract_extension_types(args)
+        auth_user = xnat_cli_scripts.cli_common.extract_auth_user(args)
+        auth_password = xnat_cli_scripts.cli_common.extract_auth_password(args)
+        xnat_extensions = xnat_cli_scripts.cli_common.extract_extension_types(args)
 
-    session = xnat.connect(args.url, user=auth_user, password=auth_password, extension_types=xnat_extensions)
+        session = xnat.connect(args.url, user=auth_user, password=auth_password, extension_types=xnat_extensions)
 
 try:
     if args.list:
@@ -2988,10 +3116,13 @@ try:
         execute_update_master(session, args)
     elif args.get:
         execute_get_master(session, args)
+    elif args.are_present:
+        execute_are_present(session, args)
     else:
         print("[ERROR] No valid action specified. Use -L, -R, --update, or --get.")
 finally:
-    session.disconnect()  # Ensures cleanup even if an error occurs
+    if session:
+        session.disconnect()  # Ensures cleanup even if an error occurs
 
 
 

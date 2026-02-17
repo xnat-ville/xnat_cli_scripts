@@ -108,16 +108,82 @@ def execute_are_present(connection: XNATSession, args: argparse.Namespace) -> No
             for subject in missing_or_errant:
                 print(subject, file=csv_output)
 
+
+
+def execute_subject_db_test(connection: XNATSession, args: argparse.Namespace) -> None:
+    production_subjects = create_subject_dictionary(args.production_subjects)
+    target_subjects = create_subject_dictionary(args.target_subjects)
+    not_found_in_target = set()
+    not_found_in_production = set()
+    labels_differ = set()
+    for k,v in production_subjects.items():
+        if k in target_subjects:
+            v_target = target_subjects[k]
+            if v['label'] != v_target['label']:
+                mashup=f"{k} / {v['label']} / {v_target['label']}"
+                labels_differ.add(mashup)
+        else:
+            not_found_in_target.add(f"{v['insert_date_yyyy']} {v['project']} {k} {v['label']}")
+
+    for k_target, v_target in target_subjects.items():
+        if k_target not in production_subjects:
+            not_found_in_production.add(f"{v_target['project']} {k_target} {v_target['label']} {v_target['insert_date_yyyymmdd']}")
+
+    print(f"Production length:       {len(production_subjects)}")
+    print(f"Target length:           {len(target_subjects)}")
+    print(f"Not found in target:     {len(not_found_in_target)}")
+    print(f"Not found in production: {len(not_found_in_production)}")
+    print(f"Labels differ:           {len(labels_differ)}")
+
+    if (args.output_folder):
+        write_subject_db_test_reports(args.output_folder, production_subjects, target_subjects, not_found_in_target, not_found_in_production, labels_differ)
+
+    x = 3
+
+def write_subject_db_test_reports(report_folder:str, production_subjects:dict, target_subjects:dict, not_found_in_target:set, not_found_in_production:set, labels_differ:set) -> None:
+    os.makedirs(report_folder, exist_ok=True)
+    with open(f"{report_folder}/not_found_in_target.txt", 'w') as f:
+        for v in sorted(not_found_in_target):
+            print(v, file=f)
+
+    with open(f"{report_folder}/not_found_in_production.txt", 'w') as f:
+        for v in sorted(not_found_in_production):
+            print(v, file=f)
+
+    with open(f"{report_folder}/labels_differ.txt", 'w') as f:
+        for v in sorted(labels_differ):
+            print(v, file=f)
+
+    print("Reports done")
+
 def create_subject_dictionary(file_path: str) -> dict:
     d = dict()
     with open(file_path, "r") as f:
         for subject_line in f:
-            tokens = subject_line.split()
-            subject_key = f"{tokens[0]}\t{tokens[1]}"
-            subject_label = tokens[2]
-            d[subject_key] = subject_label
+            subject = dict()
+            tokens = subject_line.rstrip('\n').split('\t')
+            subject['project'] = tokens[0]
+            subject['id'] = tokens[1]
+            subject['label'] = tokens[2]
+            subject['insert_date'] = tokens[8]
+            if tokens[9] != '':
+                subject['modified_date'] = tokens[9]
+            else:
+                subject['modified_date'] = subject['insert_date']
+
+            insert_date_tokens = subject['insert_date'].split(' ')
+            subject['insert_date_yyyymmdd'] = insert_date_tokens[0]
+            insert_date_yyyymmdd = subject['insert_date_yyyymmdd'].split('-')
+            subject['insert_date_yyyy'] = insert_date_yyyymmdd[0]
+
+            subject_key = subject['id']
+            if subject_key in d:
+                raise Exception(f"Duplicate Subject ID: {subject_key} current line: {subject_line} existing record: {subject}")
+            d[subject_key] = subject
 
     return d
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="List projects from an XNAT system")
@@ -132,12 +198,12 @@ if __name__ == "__main__":
     parser.add_argument('-R', '--remove',          dest='remove',                   help='Remove groups from projects',                action='store_true')
     parser.add_argument(        '--update',        dest='update',                   help='Update project accessibilities',             action='store_true')
     parser.add_argument(        '--get',           dest='get',                      help='Get a certain type of object at Project Level', action='store_true')
-    parser.add_argument(        '--are_present',   dest='are_present',              help="Test to see if subjects are present",        action='store_true')
+    parser.add_argument(        '--subject_db_test', dest='subject_db_test',        help="Compare subjects in production/target DBs",  action='store_true')
 
     # These are objects of the operations;
     parser.add_argument(       '--projects',        dest='projects',                 help='Include project in output',                 action='store_true')
-    parser.add_argument(       '--test_subjects',   dest='test_subjects',            help="File with list of subjects to be tested")
-    parser.add_argument(       '--reference_subjects', dest='reference_subjects',    help="File with list of reference subjects")
+    parser.add_argument(       '--target_subjects', dest='target_subjects',          help="File with list of subjects in the target system")
+    parser.add_argument(       '--production_subjects', dest='production_subjects',  help="File with list of existing production subjects")
 
 
     ## Further modifiers
@@ -164,8 +230,8 @@ if __name__ == "__main__":
 try:
     if args.list:
         execute_list_master(session, args)
-    elif args.are_present:
-        execute_are_present(session, args)
+    elif args.subject_db_test:
+        execute_subject_db_test(session, args)
     else:
         print("[ERROR] No valid action specified. Use -L, -R, --update, or --get.")
 finally:

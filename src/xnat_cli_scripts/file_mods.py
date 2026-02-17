@@ -150,13 +150,17 @@ def remove_datatypes_master(args: argparse.Namespace) -> None:
         print("remove_datatypes_master: did not recognize target object. Expected project_json flag")
 
 def whitelist_session_xml_assessor_datatypes(args: argparse.Namespace) -> None:
-    print("whitelist_session_xml_assessor_datatypes")
     if (not args.input_file) and (not args.output_file):
         print(f"Missing --input_file and/or --output_file for whitelist_session_xml_assessor_datatypes {args}")
         exit(1)
 
     white_list = xnat_cli_scripts.cli_common.read_text_file_into_set(args.assessor_datatypes)
+    # Parse the XML into a tree so we can use normal XML operations to
+    # find the elements to remove.
+    # Read the raw XML now so we can write it out later.
+    # It might not be touched, or we might remove lines from the raw XML
     try:
+        raw_xml = xnat_cli_scripts.cli_common.read_text_file_into_list(args.input_file)
         session_tree = ET.parse(args.input_file)
         session_root = session_tree.getroot()
         element_count = len(session_root)
@@ -181,7 +185,6 @@ def whitelist_session_xml_assessor_datatypes(args: argparse.Namespace) -> None:
             # that corresponds to the data types we have not whitelisted.
             # Wish we could have just done that with XML processing, but the library we chose
             # collapses name spaces. I did not want to alter the XNAT defined namespaces.
-            raw_xml = xnat_cli_scripts.cli_common.read_text_file_into_list(args.input_file)
 
             data_types_removed = 0
             xml_length = len(raw_xml)
@@ -195,10 +198,13 @@ def whitelist_session_xml_assessor_datatypes(args: argparse.Namespace) -> None:
                     # Ask we back over the lines in the file, we should find the first line in the assessor.
                     last_assessor_close = index
                 else:
-                    match = next((x for x in assessors_to_remove if x in this_line), False)
+                    # We need the formatted compare because some assessors were shared and use the same ID.
+                    # So, this makes sure we match on an xnat:assessor and not a share
+                    match = next((x for x in assessors_to_remove if f"<xnat:assessor ID=\"{x}\"" in this_line), False)
                     if match:
+                        print(this_line)
                         print(f"{index} {last_assessor_close} {this_line}")
-                        del raw_xml[index:last_assessor_close]
+                        del raw_xml[index:last_assessor_close+1]
                         last_assessor_close = -1
 
         with open(args.output_file, "w") as outfile:
