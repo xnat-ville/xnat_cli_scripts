@@ -83,6 +83,16 @@ def get_project_ids(connection: XNATSession, args: argparse.Namespace) -> []:
         project_ids = [p['ID'] for p in all_projects['ResultSet']['Result']]
         return project_ids
 
+def get_project_subject_array(csv_path:str) -> []:
+    project_subject_ids = []
+    with open(csv_path, mode='r') as file:
+        csv_reader = csv.reader(file, delimiter='\t')
+        for row in csv_reader:
+            if (not row[0].startswith("#")):
+                project_subject_ids.append(row)
+
+        return project_subject_ids
+
 
 def get_project_subject_ids(connection: XNATSession, args: argparse.Namespace) -> []:
     if (args.csv_file and args.csv_projects_subjects_file):
@@ -2081,7 +2091,7 @@ def execute_get_resource_config(connection: XNATSession, args: argparse.Namespac
 
         except xnat.exceptions.XNATResponseError as e:
             if "404" in str(e):
-                xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: 404 Error for session {session_id}: {e}")
+                xnat_cli_scripts.cli_common.print_stderr(f"[ERROR]: 404 Error for project {project_id}: {e}")
                 print("{0:6d} / {1:6d}   404 Error   {2:25s} {3:s}".format(project_index, project_count, project_id, time_stamp), flush=True)
                 continue
             else:
@@ -2828,7 +2838,7 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
         execute_get_scan_quality_json(connection,args)
         return
 
-    print("[ERROR] No valid 'GET' action specified.")
+    print("[ERROR] No valid 'GET' datatype specified.")
 
 
 #def execute_project_list(session: XNATSession, args: argparse.Namespace) -> None:
@@ -2846,6 +2856,41 @@ def execute_get_master(connection: XNATSession, args: argparse.Namespace) -> Non
 #        project_pi = f"{project_json['pi_lastname']}, {project_json['pi_firstname']}"
 #        z = session.get_json(f"/data/projects/{project_id}")
 #        print(format_project_data(project_json, project_object))
+
+def execute_delete_subjects(connection: XNATSession, args: argparse.Namespace) -> None:
+    """
+      Deletes subjects from an XNAT.
+      Caller must provide a list of projects/subjects in args.csv_file
+      The default XNAT behavior is to delete the subject from the project and not delete files from the file system.
+    """
+    if not args.csv_file:
+        print("[ERROR] Delete subjects requires a csv file")
+    # Get subject IDs
+    project_subject_ids = get_project_subject_array(args.csv_file)
+
+    for project_subject in project_subject_ids:
+        project_id=project_subject[0]
+        subject_id=project_subject[1]
+        delete_url = f"/data/projects/{project_id}/subjects/{subject_id}"
+        try:
+            response = connection.delete(delete_url, accepted_status=[200,404])
+            if response.status_code == 200:
+                print(f"{project_id}\t{subject_id}\tREMOVED")
+            elif response.status_code == 404:
+                print(f"{project_id}\t{subject_id}\tNOT FOUND, 404 Error")
+            else:
+                print(f"{project_id}\t{subject_id}\tERROR\t{response.status_code}:{response.text}")
+
+        except Exception as e:
+            print(f"{project_id}\t{subject_id}\tERROR\tRequest Failed: {e}")
+
+
+def execute_delete_master(connection: XNATSession, args: argparse.Namespace) -> None:
+    if args.subjects:
+        execute_delete_subjects(connection, args)
+        return
+
+    print("[ERROR] No valid 'DELETE' datatype specified.")
 
 
 def format_subject_header_rows() -> str:
@@ -3045,6 +3090,7 @@ if __name__ == "__main__":
     parser.add_argument('-R', '--remove',          dest='remove',                   help='Remove groups from projects',                action='store_true')
     parser.add_argument(        '--update',        dest='update',                   help='Update project accessibilities',             action='store_true')
     parser.add_argument(        '--get',           dest='get',                      help='Get a certain type of object at Project Level', action='store_true')
+    parser.add_argument(        '--delete',        dest='delete',                   help='Delete from a set of datatypes',             action='store_true')
     parser.add_argument(        '--are_present',  dest='are_present',               help="Test to see if experiments are present",     action='store_true')
 
     # These are objects of the operations; 
@@ -3116,6 +3162,8 @@ try:
         execute_update_master(session, args)
     elif args.get:
         execute_get_master(session, args)
+    elif args.delete:
+        execute_delete_master(session, args)
     elif args.are_present:
         execute_are_present(session, args)
     else:
