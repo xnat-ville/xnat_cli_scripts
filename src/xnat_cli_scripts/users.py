@@ -44,18 +44,38 @@ def execute_list_user_projects(connection: xnat.session.XNATSession, args: argpa
         sleep(float_sleep)
 
 def execute_list_user_groups(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
-    target_user = args.target_user
-    user_groups = connection.get_json(f"/xapi/users/{target_user}/groups")
-    index = 1
-    group_length = len(user_groups)
-
+    user_array = get_user_array(connection, args)
+    user_array.sort()
     tab = "\t"
-    for x_group in user_groups:
-        if args.verbose:
-            print(f"{index}{tab}{target_user}{tab}{x_group}")
-            index += 1
-        else:
-            print(f"{target_user}{tab}{x_group}")
+    output_array = []
+    user_index = 0
+    row_index = 0
+
+    # First, extract everything into output_array
+    for target_user in user_array:
+        user_groups = connection.get_json(f"/xapi/users/{target_user}/groups")
+        user_groups.sort()
+        group_index = 0
+        user_index += 1
+
+        for x_group in user_groups:
+            row_index += 1
+            group_index += 1
+            if args.verbose:
+                x_string = f"{row_index}{tab}{target_user}{tab}{x_group}"
+            else:
+                x_string = f"{target_user}{tab}{x_group}"
+
+
+            output_array.append(x_string)
+            print(f"{user_index} {len(user_array)} {group_index} {len(user_groups)}  {x_string}")
+
+    if args.output_csv:
+        with open(args.output_csv, "w", encoding="utf-8") as output_csv:
+            for x in output_array:
+                print(x, file=output_csv)
+
+
 
 def execute_list_master(connection: xnat.session.XNATSession, args: argparse.Namespace) -> None:
     if (args.projects):
@@ -109,6 +129,16 @@ def execute_user_group_clone(connection: xnat.session.XNATSession, args: argpars
         sleep(float_sleep)
 
 
+def get_user_array(connection: xnat.session.XNATSession, args: argparse.Namespace) -> []:
+    rtn_array = []
+    if (args.target_user):
+        rtn_array.append(args.target_user)
+        return rtn_array
+
+    rtn_array = connection.get_json(f"/xapi/users")
+    return rtn_array
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="List projects from an XNAT system")
@@ -128,6 +158,7 @@ if __name__ == "__main__":
     parser.add_argument('-P', '--projects',        dest='projects',        help='Verb object: Projects',         action='store_true')
     parser.add_argument('-g', '--groups',          dest='groups',          help='Verb object: Groups',           action='store_true')
     parser.add_argument('-c', '--csv',             dest='csv_file',        help="CSV file with list of objects (projects, roles, ...) for operations")
+    parser.add_argument('--output_csv',            dest='output_csv',      help="Output CSV file")
     parser.add_argument('-t', '--target_user',     dest='target_user',     help='Target user: Operations performed on the target')
 
     ## Further modifiers
